@@ -29,18 +29,39 @@ which suits sigils. No machine learning, no training data beyond the user's own 
 
 Python standard library only (tkinter + ctypes), so there is nothing to install.
 
+### Where it stands
+
+There is currently a **mock build**: it works end to end (Sigil Book window, sigil editor,
+floating ✦ button, overlay, recognizer), but we've decided we want to **change the look
+and theme of the window** to make it more attractive before handing it to Jun.
+
+## Ideas we considered first
+
+Before settling on sigils, we thought about:
+
+- **Invoice orders** for Jcelestra03's sister and the company she works for.
+- **A mini music player for several people**, a better version of Spotify Jam.
+- **A desktop app to resize Windows' UI and taskbar.**
+
+We picked the sigil overlay because it's made for a specific friend (Jun) and connects
+to things they already love.
+
 ## Who it is for
 
-**TODO (both):** name the real person we are building for, someone not on our team.
+**Jun**, a friend of ours who loves playing games, likes drawing art, and loves the anime
+*Witch Hat Atelier*, the anime this whole idea comes from. Drawing a sigil to open a game
+brings together all three things Jun enjoys.
 
-- Person: _______________
+Jun doesn't know we're making this for them yet; it's a surprise. We're confident they'll
+love it, but because it's a surprise we have to work out what they need without asking
+them directly.
+
 - What they open every day (apps / sites / folders): _______________
-- What they said they want from it: _______________
-- Date we interviewed them: _______________
+- What we learned about what they'd want: _______________
 - Date we handed it over: _______________
 
-Their answers decide which sigils we preload, which hotkey we use, and what we
-polish in week 2.
+What we learn about Jun decides which sigils we preload (likely their games and drawing
+apps), which hotkey we use, and what we polish in week 2.
 
 ## Who owns what
 
@@ -87,18 +108,19 @@ Changing this signature needs both of us to agree, in a PR.
 | When | Goal |
 | --- | --- |
 | Sun Nov 1 | Repo set up, prototype runs end to end, portfolio check-in card submitted |
-| Tue Nov 3 | Interview our person; fill in "Who it is for"; list their sigils |
-| Thu Nov 5 | Features from the interview done (see backlog) |
-| Sat Nov 7 | Hand it over: install it on their machine / demo it, collect feedback |
+| Tue Nov 3 | Find out which games and apps Jun uses (without spoiling the surprise); list their sigils |
+| Thu Nov 5 | New look and theme for the window done; Jun's sigils preloaded |
+| Sat Nov 7 | Surprise Jun: install it on their machine, show them, collect feedback |
 | Sun Nov 8 | Final log entries, portfolio cards, Canvas submissions |
 
-## Backlog (pick from here, in order of what our person cares about)
+## Backlog (pick from here, in order of what Jun cares about)
 
-- [ ] Preload sigils for our person's apps and sites
+- [ ] Redesign the look and theme of the Sigil Book window so it's more attractive
+- [ ] Preload sigils for Jun's games and apps
 - [x] Settings window to add/remove sigils without the command line (Sigil Book)
 - [x] A way to cast without the hotkey (floating ✦ button)
 - [ ] Start with Windows (shortcut in the Startup folder) + tray icon
 - [ ] Multi-monitor overlay (currently primary monitor only)
 - [ ] Nicer "casting" animation (glow, fade, rune circle)
-- [ ] Tune the match threshold with real drawings from our person
+- [ ] Tune the match threshold with real drawings (ours, then Jun's)
 - [x] Configurable hotkey (`--hotkey`, `SIGIL_HOTKEY`)

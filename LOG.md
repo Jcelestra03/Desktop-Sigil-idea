@@ -81,3 +81,21 @@ Agents append here too (see `CLAUDE.md`).
   YouTube (99% match). Screenshots checked.
 - Not yet tried by hand by a person; the actual browser/app launch was stubbed out in the
   scripted run.
+
+---
+
+## 2026-11-01 — Who it's for, where it stands, earlier ideas (Jcelestra03, with Claude, `jem-branch`)
+
+**Decided**
+- We're building this for **Jun**, a friend who loves games, drawing art, and
+  *Witch Hat Atelier*. It's a surprise: Jun doesn't know yet, so we'll learn which games
+  and apps they use without asking directly.
+- The current build is a mock build. We want to change the look and theme of the window
+  to make it more attractive before handover. Added to the backlog and the Nov 5 milestone.
+- Recorded the ideas we considered before this one: invoice orders for Jcelestra03's
+  sister's company, a multi-person mini music player (a better Spotify Jam), and a desktop
+  app to resize Windows' UI and taskbar.
+
+**Changed**
+- `PLAN.md`: filled in "Who it is for", added "Where it stands" and "Ideas we considered
+  first", reworded milestones and backlog around Jun and the surprise handover.
