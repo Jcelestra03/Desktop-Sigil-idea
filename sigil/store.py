@@ -78,3 +78,23 @@ def save(sigils: list[Sigil], path: Path | None = None) -> None:
 
 def find(sigils: list[Sigil], name: str) -> Sigil | None:
     return next((s for s in sigils if s.name.lower() == name.lower()), None)
+
+
+# App settings (hotkey, floating button) live beside sigils.json in settings.json.
+SETTINGS_DEFAULTS = {"hotkey": "ctrl+alt+s", "orb": True, "orb_pos": None}
+
+
+def settings_path() -> Path:
+    return sigil_path().with_name("settings.json")
+
+
+def load_settings(path: Path | None = None) -> dict:
+    path = path or settings_path()
+    settings = dict(SETTINGS_DEFAULTS)
+    if path.exists():
+        settings.update(json.loads(path.read_text(encoding="utf-8")))
+    return settings
+
+
+def save_settings(settings: dict, path: Path | None = None) -> None:
+    (path or settings_path()).write_text(json.dumps(settings, indent=2), encoding="utf-8")

@@ -56,19 +56,24 @@ class HotkeyListener:
         modifiers, self.vk = parse(hotkey)
         self.modifiers = modifiers | MOD_NOREPEAT
         self._thread_id: int | None = None
+        self._thread: threading.Thread | None = None
         self._registered = threading.Event()
         self._error: int | None = None
 
     def start(self) -> None:
         """Start listening. Raises OSError if the hotkey is taken by another program."""
-        threading.Thread(target=self._loop, daemon=True).start()
+        self._thread = threading.Thread(target=self._loop, daemon=True)
+        self._thread.start()
         self._registered.wait()
         if self._error is not None:
             raise ctypes.WinError(self._error)
 
     def stop(self) -> None:
+        """Stop listening and wait until the hotkey is released, so it can be re-registered."""
         if self._thread_id is not None:
             _user32.PostThreadMessageW(self._thread_id, WM_QUIT, 0, 0)
+        if self._thread is not None:
+            self._thread.join(timeout=1)
 
     def _loop(self) -> None:
         # The hotkey belongs to the thread that registers it, so register here.
@@ -85,3 +90,9 @@ class HotkeyListener:
                     self.callback()
         finally:
             _user32.UnregisterHotKey(None, 1)
+
+
+def pretty(hotkey: str) -> str:
+    """'ctrl+alt+s' -> 'Ctrl+Alt+S'"""
+    return "+".join(p.upper() if len(p) == 1 else p.capitalize()
+                    for p in hotkey.lower().replace(" ", "").split("+"))
