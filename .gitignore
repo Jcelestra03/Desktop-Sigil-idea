@@ -1,0 +1,10 @@
+# Personal sigils (each user's own drawings and app paths)
+sigils.json
+
+__pycache__/
+*.pyc
+.venv/
+venv/
+.vscode/
+.idea/
+.claude/settings.local.json
