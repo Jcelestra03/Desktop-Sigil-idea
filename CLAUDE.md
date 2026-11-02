@@ -22,8 +22,15 @@ window. Keep it that way — every user-facing feature belongs in the window, an
 is for developers.
 
 - `Desktop Sigil.pyw` — double-click launcher; shows a dialog + `sigil-error.log` on crash.
-- `sigil/manager.py` — Sigil Book main window, sigil editor dialog, floating ✦ cast button.
-- `sigil/drawpad.py` — drawing canvas used in the editor, and thumbnail drawing.
+- `sigil/manager.py` — Sigil Book main window (an open grimoire drawn on one Canvas, with
+  coordinate-based click areas instead of widgets), sigil editor dialog, floating ✦ button.
+- `sigil/themes.py` — the two looks, Parchment and Obsidian. Both dicts must have the same
+  keys (a test checks this); read colors and fonts from the theme, never hard-code them.
+- `sigil/grimoire.py` — draws the desk, props and pages. Seeded randomness, so redraws are
+  stable. Items tagged `bg` (background), `front` (props above the writing), `fg` (page
+  writing, redrawn on every click by `draw_pages`).
+- `sigil/drawpad.py` — drawing canvas used in the editor, Paint-style pens (`PENS`,
+  `render_stroke`), and thumbnail drawing. Pens only change looks; never the points.
 - `sigil/recognizer.py` — $P point-cloud recognizer. Pure functions, no tkinter.
 - `sigil/store.py` — loads/saves `sigils.json` and `settings.json` (gitignored, per-user).
 - `sigil/actions.py` — runs a sigil's action; tidies typed targets (adds https://).

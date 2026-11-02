@@ -99,3 +99,66 @@ Agents append here too (see `CLAUDE.md`).
 **Changed**
 - `PLAN.md`: filled in "Who it is for", added "Where it stands" and "Ideas we considered
   first", reworded milestones and backlog around Jun and the surprise handover.
+
+---
+
+## 2026-11-02 — The window becomes an open grimoire, in two versions (Jcelestra03, with Claude, `jem-branch`)
+
+**Why**
+- The mock build worked but looked plain. Jcelestra03 shared two reference pictures of
+  open grimoires and asked for one version based on each.
+
+**Changed**
+- The Sigil Book is now drawn on one canvas as an open book on a desk (`sigil/grimoire.py`):
+  left page is the *Sigil Index* (each sigil in an ink seal ring, ◂ ▸ to turn pages, mouse
+  wheel works too); right page shows the selected sigil as a large rune seal with Edit /
+  Test it / Erase, plus Inscribe / Cast / Test actions, hotkey and ✦-button settings.
+- Two themes (`sigil/themes.py`), switchable at the top of the window and saved in
+  `settings.json`:
+  - **Parchment** (picture 1): aged pages, faint rune writing, stains, red-ink seals,
+    gilt page edges; white fur desk, amethyst sphere, crystal ball, twigs, beads, ribbon.
+  - **Obsidian** (picture 2): black pages, gold ink, bone-bead strand on the spine,
+    quill; teal wood desk, black candles, seal coins, parchment scraps.
+- Sigil editor and floating ✦ button follow the chosen theme; the drawing pad uses the
+  theme's ink (red or gold).
+- Fonts are all built into Windows (Gabriola, Palatino Linotype, Segoe UI Historic /
+  Symbol), so it looks the same on Jun's PC.
+
+**Verified**
+- `python -m unittest`: 20 tests pass (new: theme color blend, both themes have the same
+  keys, unknown theme falls back to Parchment).
+- Screenshots of both themes (book, welcome page, editor) checked. Full redraw ~80 ms,
+  redraw on a click ~15 ms.
+- Simulated clicks: selecting a sigil, turning the page, switching theme (and it's saved).
+- Not yet: someone using it by hand; the drawing overlay itself is still the old purple/gold
+  look (backlog).
+
+---
+
+## 2026-11-02 — Bigger sigil editor with Paint-style pens (Jcelestra03, with Claude, `jem-branch`)
+
+**Why**
+- The *Inscribe a new sigil* window was too small to draw on comfortably, and Jcelestra03
+  wanted different pen types, sizes and colors like MS Paint.
+
+**Changed**
+- Drawing pad grows with the screen: 640 px on a 1080p screen (was 300 px), smaller
+  screens get at least 380 px. Saved drawings moved to the left column (88 px previews),
+  and the editor opens centered on the book.
+- Toolbar above the pad: 7 pens (Pen, Brush with tapered ends, Calligraphy with a 45°
+  flat nib, Quill that thins when you move fast and pools ink at the ends, Marker, Spray,
+  Glow), a size slider (1–30) with a live preview, 12 color swatches (the first is the
+  grimoire's own ink, so it follows Parchment/Obsidian) plus **More…** for any color,
+  and **↶ Undo** / Ctrl+Z.
+- Changing the pen restyles the whole drawing. The style is saved with the sigil and
+  used for its seal in the index and on the right page.
+- `store.py` (Tiffany's): optional `style` field on each sigil. Older `sigils.json`
+  files load unchanged. Recognition never reads it.
+
+**Verified**
+- `python -m unittest`: 24 tests pass (new: every pen draws, styled thumbnails,
+  undo/restyle never change the points, style saved and old files still load).
+- Screenshots of the editor (brush, quill) and the book with four differently-styled
+  sigils, in both grimoires.
+- Not yet: drawing by hand with a real mouse, and the cast overlay still uses its own
+  single pen.

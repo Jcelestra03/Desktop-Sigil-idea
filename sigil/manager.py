@@ -1,35 +1,38 @@
-"""Sigil Book: the main window. Add, edit, test and cast sigils without the terminal.
+"""Sigil Book: the main window, drawn as an open grimoire. Add, edit, test and cast sigils
+without the terminal.
+
+Left page: the Sigil Index (click a sigil to select it, double-click to edit, ◂ ▸ to turn
+pages). Right page: the selected sigil's seal and the actions. Two looks, chosen at the
+top of the window: Parchment and Obsidian (see themes.py).
 
 While this window is open (or minimized), the hotkey and the floating cast button work.
 """
 
 from __future__ import annotations
 
+import math
 import os
 import tkinter as tk
-from tkinter import filedialog, messagebox, simpledialog
+import tkinter.font as tkfont
+from dataclasses import dataclass
+from tkinter import colorchooser, filedialog, messagebox, simpledialog
+from typing import Callable
 
-from . import actions, store
+from . import actions, grimoire, store, themes
 from .app import SigilApp
-from .drawpad import DrawPad, draw_strokes
+from .drawpad import DEFAULT_STYLE, MAX_SIZE, MIN_SIZE, PENS, DrawPad, draw_strokes, render_stroke
 from .hotkey import parse as parse_hotkey, pretty
-from .overlay import GLOW as GOLD_DARK, INK as GOLD, make_root
+from .overlay import make_root
 from .recognizer import DEFAULT_MIN_SCORE, Stroke, compare, recognize
-
-BG = "#15132a"
-PANEL = "#1f1c3a"
-PANEL_HI = "#2c2852"
-TEXT = "#e9e3ff"
-MUTED = "#8c86a8"
-DANGER = "#e58c8c"
-INK_BG = "#0b0a1a"
-
-FONT = ("Segoe UI", 11)
-FONT_SMALL = ("Segoe UI", 9)
-FONT_BOLD = ("Segoe UI Semibold", 12)
-FONT_TITLE = ("Segoe UI Semibold", 22)
+from .themes import blend
 
 RECOMMENDED_SAMPLES = 3
+ROW_H = 76
+
+# ink colors in the editor, after the grimoire's own ink (black, crimson, gold, amethyst,
+# sapphire, emerald, amber, rose, teal, white, brown)
+PALETTE = ["#1b1b1b", "#a32a1e", "#e0c27a", "#6b3f8f", "#2f5fa8", "#2f7d4f", "#d9772b",
+           "#c8487a", "#4fb3bf", "#ffffff", "#7a5230"]
 
 TARGET_LABELS = {
     "app": "Program to open",
@@ -38,131 +41,320 @@ TARGET_LABELS = {
     "folder": "Folder to open",
 }
 
-
-def button(parent: tk.Misc, text: str, command, primary: bool = False,
-           danger: bool = False, **kw) -> tk.Button:
-    bg = GOLD if primary else PANEL_HI
-    fg = INK_BG if primary else (DANGER if danger else TEXT)
-    return tk.Button(parent, text=text, command=command, bg=bg, fg=fg, activebackground=fg,
-                     activeforeground=bg, relief="flat", bd=0, padx=14, pady=6, font=FONT,
-                     cursor="hand2", **kw)
+OPENS = {"app": "Opens the program", "url": "Opens the website", "file": "Opens the file",
+         "folder": "Opens the folder"}
 
 
-def label(parent: tk.Misc, text: str = "", muted: bool = False, font=FONT,
-          bg: str = BG, **kw) -> tk.Label:
-    return tk.Label(parent, text=text, bg=bg, fg=MUTED if muted else TEXT, font=font,
-                    anchor="w", justify="left", **kw)
+@dataclass
+class Hit:
+    """A clickable spot on the book canvas."""
+    box: tuple[float, float, float, float]
+    on_click: Callable[[], None]
+    on_double: Callable[[], None] | None = None
+    item: int | None = None
+    color: str = ""
+    hover: str = ""
 
 
 class SigilBook:
     def __init__(self) -> None:
         root = self.root = make_root()
         root.title("Desktop Sigil — Sigil Book")
-        root.configure(bg=BG)
-        root.geometry("760x600")
-        root.minsize(600, 440)
+        root.geometry("1160x760")
+        root.minsize(1000, 680)
         root.protocol("WM_DELETE_WINDOW", self.quit)
 
         self.settings = store.load_settings()
+        self.theme = themes.get(self.settings.get("theme"))
         self.app = SigilApp(root, on_status=self.set_status)
         self.orb: CastOrb | None = None
+        self.sigils: list[store.Sigil] = []
+        self.selected: str | None = None
+        self.folio = 0
+        self.status = "Ready."
+        self.hotkey_text = ""
+        self.hits: list[Hit] = []
+        self._hover: Hit | None = None
+        self._size = (0, 0)
+        self._resize_job: str | None = None
 
-        self._build()
-        self.refresh()
+        self.canvas = tk.Canvas(root, highlightthickness=0, bg=self.theme["desk"])
+        self.canvas.pack(fill="both", expand=True)
+        self.canvas.bind("<Configure>", self._on_resize)
+        self.canvas.bind("<Motion>", self._on_motion)
+        self.canvas.bind("<Leave>", lambda e: self._set_hover(None))
+        self.canvas.bind("<Button-1>", self._on_click)
+        self.canvas.bind("<Double-Button-1>", self._on_double)
+        self.canvas.bind("<MouseWheel>", self._on_wheel)
+
+        self.sigils = store.load()
         self.apply_hotkey(self.settings["hotkey"], initial=True)
         if self.settings["orb"]:
             self.show_orb()
         root.deiconify()
 
-    # ---- layout -------------------------------------------------------------
+    # ---- drawing ------------------------------------------------------------
 
-    def _build(self) -> None:
-        root = self.root
-        header = tk.Frame(root, bg=BG, padx=24, pady=18)
-        header.pack(fill="x")
-        tk.Label(header, text="✦ Sigil Book", bg=BG, fg=GOLD, font=FONT_TITLE).pack(anchor="w")
-        label(header, "Draw a sigil to open a program, website, file or folder.",
-              muted=True).pack(anchor="w")
-
-        toolbar = tk.Frame(root, bg=BG, padx=24)
-        toolbar.pack(fill="x")
-        button(toolbar, "+  New sigil", self.new_sigil, primary=True).pack(side="left")
-        button(toolbar, "✦  Cast a sigil", lambda: self.app.summon()).pack(side="left", padx=8)
-        button(toolbar, "Test a drawing", lambda: self.app.summon(dry_run=True)).pack(side="left")
-
-        # Scrollable list of sigils
-        holder = tk.Frame(root, bg=BG, padx=24, pady=14)
-        holder.pack(fill="both", expand=True)
-        self.list_canvas = tk.Canvas(holder, bg=BG, highlightthickness=0)
-        scroll = tk.Scrollbar(holder, orient="vertical", command=self.list_canvas.yview)
-        self.list_canvas.configure(yscrollcommand=scroll.set)
-        scroll.pack(side="right", fill="y")
-        self.list_canvas.pack(side="left", fill="both", expand=True)
-        self.list_frame = tk.Frame(self.list_canvas, bg=BG)
-        window = self.list_canvas.create_window(0, 0, window=self.list_frame, anchor="nw")
-        self.list_frame.bind("<Configure>", lambda e: self.list_canvas.configure(
-            scrollregion=self.list_canvas.bbox("all")))
-        self.list_canvas.bind("<Configure>", lambda e: self.list_canvas.itemconfigure(
-            window, width=e.width))
-        self.list_canvas.bind("<Enter>", lambda e: root.bind_all("<MouseWheel>", self._wheel))
-        self.list_canvas.bind("<Leave>", lambda e: root.unbind_all("<MouseWheel>"))
-
-        footer = tk.Frame(root, bg=PANEL, padx=24, pady=10)
-        footer.pack(fill="x", side="bottom")
-        self.status = label(footer, "Ready.", muted=True, bg=PANEL)
-        self.status.pack(side="left", fill="x", expand=True)
-        self.orb_var = tk.BooleanVar(value=self.settings["orb"])
-        tk.Checkbutton(footer, text="Floating cast button", variable=self.orb_var,
-                       command=self.toggle_orb, bg=PANEL, fg=TEXT, selectcolor=PANEL_HI,
-                       activebackground=PANEL, activeforeground=TEXT, font=FONT_SMALL,
-                       cursor="hand2").pack(side="right")
-        tk.Button(footer, text="Change", command=self.change_hotkey, bg=PANEL, fg=GOLD,
-                  activebackground=PANEL, activeforeground=TEXT, relief="flat", bd=0,
-                  font=FONT_SMALL, cursor="hand2").pack(side="right", padx=(4, 16))
-        self.hotkey_label = label(footer, "", muted=True, bg=PANEL, font=FONT_SMALL)
-        self.hotkey_label.pack(side="right")
-
-    def _wheel(self, event: tk.Event) -> None:
-        self.list_canvas.yview_scroll(int(-event.delta / 120), "units")
-
-    def refresh(self) -> None:
-        self.sigils = store.load()
-        for child in self.list_frame.winfo_children():
-            child.destroy()
-        if not self.sigils:
-            label(self.list_frame, "No sigils yet.\n\nClick “New sigil”, choose what it opens, "
-                  "and draw a shape for it.", muted=True, pady=40).pack(fill="x")
+    def _on_resize(self, event: tk.Event) -> None:
+        if (event.width, event.height) == self._size:
             return
-        for sigil in self.sigils:
-            self._row(sigil)
+        self._size = (event.width, event.height)
+        if self._resize_job:
+            self.root.after_cancel(self._resize_job)
+        self._resize_job = self.root.after(40, self.redraw)
 
-    def _row(self, sigil: store.Sigil) -> None:
-        row = tk.Frame(self.list_frame, bg=PANEL, padx=12, pady=10)
-        row.pack(fill="x", pady=4)
-        thumb = tk.Canvas(row, width=64, height=64, bg=INK_BG, highlightthickness=0)
-        thumb.pack(side="left")
-        if sigil.templates:
-            draw_strokes(thumb, sigil.templates[0], 8, 8, 48, 48, GOLD, 2)
+    def redraw(self) -> None:
+        """Repaint everything: the grimoire background and the page contents."""
+        self._resize_job = None
+        c = self.canvas
+        c.delete("all")
+        w, h = max(c.winfo_width(), 1000), max(c.winfo_height(), 680)
+        before = set(c.find_all())
+        self.layout = grimoire.draw(c, w, h, self.theme)
+        for item in c.find_all():
+            if item not in before:
+                c.addtag_withtag("bg", item)
+        self.draw_pages()
 
-        text = tk.Frame(row, bg=PANEL, padx=14)
-        text.pack(side="left", fill="x", expand=True)
-        label(text, sigil.name, font=FONT_BOLD, bg=PANEL).pack(anchor="w")
-        kind = actions.KINDS.get(sigil.action["type"], sigil.action["type"])
-        label(text, f"{kind}  ·  {sigil.action['target']}", muted=True, bg=PANEL,
-              font=FONT_SMALL).pack(anchor="w", fill="x")
-        samples = len(sigil.templates)
-        label(text, f"{samples} drawing{'s' if samples != 1 else ''}", muted=True, bg=PANEL,
-              font=FONT_SMALL).pack(anchor="w")
+    def draw_pages(self) -> None:
+        """Repaint only the writing on the pages (fast; used on every click)."""
+        c = self.canvas
+        c.delete("fg")
+        self.hits = []
+        self._hover = None
+        self._draw_theme_switch()
+        self._draw_index(self.layout.left)
+        self._draw_right(self.layout.right)
+        for item in c.find_all():
+            if not c.gettags(item):
+                c.addtag_withtag("fg", item)
+        c.tag_raise("front")
 
-        button(row, "Delete", lambda: self.delete(sigil), danger=True).pack(side="right")
-        button(row, "Edit", lambda: self.edit(sigil)).pack(side="right", padx=8)
-        for widget in (row, thumb, text, *text.winfo_children()):
-            widget.bind("<Double-Button-1>", lambda e: self.edit(sigil))
+    def _text(self, x, y, text, font, color=None, **kw) -> int:
+        return self.canvas.create_text(x, y, text=text, font=self.theme[f"font_{font}"],
+                                       fill=color or self.theme["ink"], **kw)
+
+    def _button(self, x, y, text, command, font="button", anchor="center", color=None,
+                hover=None, on_double=None) -> tuple[float, float, float, float]:
+        t = self.theme
+        color = color or t["ink"]
+        item = self._text(x, y, text, font, color, anchor=anchor)
+        x0, y0, x1, y1 = self.canvas.bbox(item)
+        box = (x0 - 6, y0 - 3, x1 + 6, y1 + 3)
+        self.hits.append(Hit(box, command, on_double, item, color, hover or t["accent"]))
+        return box
+
+    def _divider(self, cx, y, half) -> None:
+        t = self.theme
+        self.canvas.create_line(cx - half, y, cx - 16, y, fill=t["ink_soft"])
+        self.canvas.create_line(cx + 16, y, cx + half, y, fill=t["ink_soft"])
+        self._text(cx, y, "✦", "small", t["accent"])
+
+    def _seal(self, cx, cy, r, strokes: list[Stroke] | None, width=3, runes=True,
+              style: dict | None = None) -> None:
+        """A double ink ring with runes between the rings, like the seals in the pictures."""
+        t, c = self.theme, self.canvas
+        c.create_oval(cx - r, cy - r, cx + r, cy + r, outline=t["accent"], width=width)
+        inner = r - (12 if runes else 5)
+        c.create_oval(cx - inner, cy - inner, cx + inner, cy + inner, outline=t["accent"], width=1)
+        if runes:
+            for i, ch in enumerate(grimoire.RUNES[:16]):
+                a = i / 16 * 2 * math.pi - math.pi / 2
+                c.create_text(cx + math.cos(a) * (r - 6), cy + math.sin(a) * (r - 6), text=ch,
+                              fill=t["accent"], font=("Segoe UI Historic", max(7, int(r / 11))))
+        box = inner * 0.68
+        if strokes:
+            draw_strokes(c, strokes, cx - box, cy - box, box * 2, box * 2, t["accent"], width,
+                         style=style or None, bg=t["page"])
+        elif strokes is None:
+            c.create_text(cx, cy, text="✦", fill=t["accent"], font=("Segoe UI Symbol", int(r * .7)))
+
+    def _fit(self, text: str, font: str, width: float) -> str:
+        f = tkfont.Font(font=self.theme[f"font_{font}"])
+        if f.measure(text) <= width:
+            return text
+        while text and f.measure(text + "…") > width:
+            text = text[:-1]
+        return text + "…"
+
+    def _draw_theme_switch(self) -> None:
+        t = self.theme
+        w = self.canvas.winfo_width()
+        y = 28
+        x = w / 2 - 110
+        self._text(x, y, "Grimoire:", "small", t["desk_text"], anchor="e")
+        for i, theme in enumerate(themes.THEMES.values()):
+            bx = x + 16 + i * 120
+            current = theme["name"] == t["name"]
+            box = self._button(bx, y, theme["label"], lambda n=theme["name"]: self.set_theme(n),
+                               font="body", anchor="w", color=t["desk_text"])
+            if current:
+                self.canvas.create_line(box[0] + 6, box[3], box[2] - 6, box[3], fill=t["accent"],
+                                        width=2)
+
+    def _draw_index(self, rect) -> None:
+        t, c = self.theme, self.canvas
+        x0, y0, x1, y1 = rect
+        cx = (x0 + x1) / 2
+        self._text(cx, y0 + 4, "Sigil Index", "title", anchor="n")
+        self._divider(cx, y0 + 70, (x1 - x0) / 2 - 20)
+
+        top, bottom = y0 + 92, y1 - 40
+        per_page = max(1, int((bottom - top) // ROW_H))
+        pages = max(1, math.ceil(len(self.sigils) / per_page))
+        self.folio = min(self.folio, pages - 1)
+        shown = self.sigils[self.folio * per_page:(self.folio + 1) * per_page]
+
+        if not self.sigils:
+            self._text(cx, top + 60, "No sigils inscribed yet.", "head", anchor="n")
+            self._text(cx, top + 110, "Choose “Inscribe a new sigil” on the right page,\n"
+                       "pick what it opens, and draw its shape.", "body", t["ink_soft"],
+                       anchor="n", justify="center")
+            return
+
+        for i, sigil in enumerate(shown):
+            ry = top + i * ROW_H
+            selected = sigil.name == self.selected
+            if selected:
+                c.create_rectangle(x0 - 10, ry - 4, x1 + 10, ry + ROW_H - 8,
+                                   fill=blend(t["page"], t["page_dark"], .35), outline="")
+                c.create_line(x0 - 10, ry - 4, x0 - 10, ry + ROW_H - 8, fill=t["accent"], width=3)
+            self._seal(x0 + 32, ry + 32, 30, sigil.templates[0] if sigil.templates else [],
+                       width=2, runes=False, style=sigil.style)
+            self._text(x0 + 78, ry + 18, self._fit(sigil.name, "name", x1 - x0 - 90), "name",
+                       anchor="w")
+            kind = actions.KINDS.get(sigil.action["type"], sigil.action["type"])
+            detail = self._fit(f"{kind} · {sigil.action['target']}", "small", x1 - x0 - 90)
+            self._text(x0 + 78, ry + 46, detail, "small", t["ink_soft"], anchor="w")
+            self.hits.append(Hit((x0 - 10, ry - 4, x1 + 10, ry + ROW_H - 8),
+                                 lambda s=sigil: self.select(s.name),
+                                 lambda s=sigil: self.edit(s)))
+
+        folio = f"folio {self.folio + 1} of {pages}"
+        self._text(cx, y1 - 6, folio, "italic", t["ink_soft"], anchor="s")
+        if self.folio > 0:
+            self._button(x0, y1 - 14, "◂ turn back", lambda: self.turn(-1), "small", anchor="w")
+        if self.folio < pages - 1:
+            self._button(x1, y1 - 14, "turn page ▸", lambda: self.turn(1), "small", anchor="e")
+
+    def _draw_right(self, rect) -> None:
+        t = self.theme
+        x0, y0, x1, y1 = rect
+        cx = (x0 + x1) / 2
+        sigil = store.find(self.sigils, self.selected) if self.selected else None
+        sy = y0 + 104
+
+        if sigil:
+            self._seal(cx, sy, 92, sigil.templates[0] if sigil.templates else [],
+                       style=sigil.style)
+            self._text(cx, sy + 108, self._fit(sigil.name, "head", x1 - x0), "head", anchor="n")
+            opens = OPENS.get(sigil.action["type"], "Opens")
+            self._text(cx, sy + 152, opens, "small", t["ink_soft"], anchor="n")
+            self._text(cx, sy + 172, self._fit(sigil.action["target"], "body", x1 - x0), "body",
+                       anchor="n")
+            n = len(sigil.templates)
+            self._text(cx, sy + 196, f"{n} drawing{'s' if n != 1 else ''}", "italic",
+                       t["ink_soft"], anchor="n")
+            by = sy + 232
+            self._button(cx - 110, by, "Edit", lambda: self.edit(sigil))
+            self._button(cx, by, "Test it", lambda: self.app.summon(dry_run=True))
+            self._button(cx + 110, by, "Erase", lambda: self.delete(sigil), color=t["accent"])
+        else:
+            self._seal(cx, sy, 92, None)
+            self._text(cx, sy + 108, "Desktop Sigil", "head", anchor="n")
+            self._text(cx, sy + 152, "Draw a sigil to open a program, website,\nfile or "
+                       "folder. Pick one from the index to see it here.", "body",
+                       t["ink_soft"], anchor="n", justify="center")
+
+        ay = y1 - 176
+        self._divider(cx, ay, (x1 - x0) / 2 - 20)
+        self._button(x0 + 10, ay + 32, "✒  Inscribe a new sigil", self.new_sigil, "button",
+                     anchor="w", color=t["accent"], hover=t["ink"])
+        self._button(x0 + 10, ay + 64, "✦  Cast a sigil", lambda: self.app.summon(), "button",
+                     anchor="w")
+        self._button(x0 + 10, ay + 96, "◉  Test a drawing", lambda: self.app.summon(dry_run=True),
+                     "button", anchor="w")
+
+        fy = y1 - 34
+        box = self._button(x0 + 10, fy, self.hotkey_text, self.change_hotkey, "small", anchor="w",
+                           color=t["ink_soft"])
+        orb = "on" if self.settings["orb"] else "off"
+        self._button(box[2] + 18, fy, f"Floating ✦ button: {orb}", self.toggle_orb, "small",
+                     anchor="w", color=t["ink_soft"])
+        room = (x1 - x0) - (150 if t["name"] == "obsidian" else 20)
+        self.status_item = self._text(x0 + 10, y1 - 8, self._fit(self.status, "italic", room),
+                                      "italic", t["ink_soft"], anchor="w")
+
+    # ---- mouse --------------------------------------------------------------
+
+    def _hit_at(self, x, y) -> Hit | None:
+        for hit in reversed(self.hits):
+            x0, y0, x1, y1 = hit.box
+            if x0 <= x <= x1 and y0 <= y <= y1:
+                return hit
+        return None
+
+    def _set_hover(self, hit: Hit | None) -> None:
+        if hit is self._hover:
+            return
+        if self._hover and self._hover.item:
+            self.canvas.itemconfigure(self._hover.item, fill=self._hover.color)
+        self._hover = hit
+        if hit and hit.item:
+            self.canvas.itemconfigure(hit.item, fill=hit.hover)
+        self.canvas.configure(cursor="hand2" if hit else "")
+
+    def _on_motion(self, event: tk.Event) -> None:
+        self._set_hover(self._hit_at(event.x, event.y))
+
+    def _on_click(self, event: tk.Event) -> None:
+        hit = self._hit_at(event.x, event.y)
+        if hit:
+            hit.on_click()
+
+    def _on_double(self, event: tk.Event) -> None:
+        hit = self._hit_at(event.x, event.y)
+        if hit and hit.on_double:
+            hit.on_double()
+
+    def _on_wheel(self, event: tk.Event) -> None:
+        self.turn(-1 if event.delta > 0 else 1)
 
     # ---- actions ------------------------------------------------------------
 
+    def refresh(self) -> None:
+        self.sigils = store.load()
+        if self.selected and not store.find(self.sigils, self.selected):
+            self.selected = None
+        self.draw_pages()
+
+    def select(self, name: str) -> None:
+        self.selected = None if self.selected == name else name
+        self.draw_pages()
+
+    def turn(self, step: int) -> None:
+        self.folio = max(0, self.folio + step)
+        self.draw_pages()
+
+    def set_theme(self, name: str) -> None:
+        if name == self.theme["name"]:
+            return
+        self.theme = themes.get(name)
+        self.settings["theme"] = name
+        store.save_settings(self.settings)
+        self.canvas.configure(bg=self.theme["desk"])
+        if self.orb:
+            self.orb.win.destroy()
+            self.orb = CastOrb(self)
+        self.redraw()
+
     def set_status(self, text: str) -> None:
-        self.status.configure(text=text)
+        self.status = text
+        item = getattr(self, "status_item", None)
+        if item and self.canvas.find_withtag(item):
+            x0, _, x1, _ = self.layout.right
+            room = (x1 - x0) - (150 if self.theme["name"] == "obsidian" else 20)
+            self.canvas.itemconfigure(item, text=self._fit(text, "italic", room))
 
     def new_sigil(self) -> None:
         SigilEditor(self, None)
@@ -171,12 +363,13 @@ class SigilBook:
         SigilEditor(self, sigil)
 
     def delete(self, sigil: store.Sigil) -> None:
-        if not messagebox.askyesno("Delete sigil", f"Delete “{sigil.name}”?", parent=self.root):
+        if not messagebox.askyesno("Erase sigil", f"Erase “{sigil.name}” from the book?",
+                                   parent=self.root):
             return
-        sigils = [s for s in store.load() if s.name != sigil.name]
-        store.save(sigils)
+        store.save([s for s in store.load() if s.name != sigil.name])
+        self.selected = None
         self.refresh()
-        self.set_status(f"Deleted {sigil.name}.")
+        self.set_status(f"Erased {sigil.name}.")
 
     def apply_hotkey(self, hotkey: str, initial: bool = False) -> bool:
         try:
@@ -185,14 +378,16 @@ class SigilBook:
             reason = str(e) if isinstance(e, ValueError) else \
                 f"{pretty(hotkey)} is already used by another program."
             if initial:
-                self.hotkey_label.configure(text=f"Hotkey off ({pretty(hotkey)} is taken)")
-                self.set_status("Click “Change” to pick a different hotkey.")
+                self.hotkey_text = f"Hotkey off ({pretty(hotkey)} is taken) · change"
+                self.status = "Click the hotkey to pick a different one."
             else:
                 messagebox.showerror("Hotkey", reason, parent=self.root)
             return False
-        self.hotkey_label.configure(text=f"Hotkey: {pretty(hotkey)}")
+        self.hotkey_text = f"Hotkey: {pretty(hotkey)} · change"
         self.settings["hotkey"] = hotkey
         store.save_settings(self.settings)
+        if hasattr(self, "layout"):
+            self.draw_pages()
         return True
 
     def change_hotkey(self) -> None:
@@ -217,7 +412,7 @@ class SigilBook:
             self.orb = CastOrb(self)
 
     def toggle_orb(self) -> None:
-        on = self.orb_var.get()
+        on = not self.settings["orb"]
         if on:
             self.show_orb()
         elif self.orb:
@@ -225,6 +420,7 @@ class SigilBook:
             self.orb = None
         self.settings["orb"] = on
         store.save_settings(self.settings)
+        self.draw_pages()
 
     def save_orb_position(self, x: int, y: int) -> None:
         self.settings["orb_pos"] = [x, y]
@@ -243,76 +439,196 @@ class SigilBook:
         self.root.mainloop()
 
 
+# ---- themed widgets for the editor dialog ------------------------------------
+
+def button(parent: tk.Misc, text: str, command, t: dict, primary: bool = False,
+           **kw) -> tk.Button:
+    bg = t["accent"] if primary else t["field"]
+    fg = t["on_accent"] if primary else t["ink"]
+    return tk.Button(parent, text=text, command=command, bg=bg, fg=fg, activebackground=fg,
+                     activeforeground=bg, relief="flat", bd=0, padx=14, pady=5,
+                     font=t["font_button"], cursor="hand2", highlightthickness=1,
+                     highlightbackground=t["field_line"], **kw)
+
+
+def label(parent: tk.Misc, text: str, t: dict, muted: bool = False, font: str = "body",
+          **kw) -> tk.Label:
+    return tk.Label(parent, text=text, bg=t["page"], fg=t["ink_soft"] if muted else t["ink"],
+                    font=t[f"font_{font}"], anchor="w", justify="left", **kw)
+
+
 class SigilEditor:
     """Dialog to create or edit one sigil: name, what it opens, and its drawings."""
 
     def __init__(self, book: SigilBook, sigil: store.Sigil | None):
         self.book = book
+        self.t = t = book.theme
         self.original = sigil
-        self.samples: list[list[Stroke]] = [list(t) for t in sigil.templates] if sigil else []
+        self.samples: list[list[Stroke]] = [list(s) for s in sigil.templates] if sigil else []
+        self.style = {**DEFAULT_STYLE, **(sigil.style if sigil else {})}
 
-        win = self.win = tk.Toplevel(book.root, bg=BG, padx=24, pady=20)
-        win.title("Edit sigil" if sigil else "New sigil")
+        win = self.win = tk.Toplevel(book.root, bg=t["page"], padx=28, pady=14,
+                                     highlightthickness=3, highlightbackground=t["gilt"])
+        win.title("Edit sigil" if sigil else "Inscribe a new sigil")
         win.transient(book.root)
         win.resizable(False, False)
+        # as big as the screen allows, so there's room to draw
+        pad_size = max(380, min(640, win.winfo_screenheight() - 400))
 
-        form = tk.Frame(win, bg=BG)
-        form.grid(row=0, column=0, sticky="nw", padx=(0, 28))
-        label(form, "Name").pack(anchor="w")
+        label(win, "Edit sigil" if sigil else "Inscribe a new sigil", t, font="head") \
+            .grid(row=0, column=0, columnspan=2, sticky="w")
+
+        form = tk.Frame(win, bg=t["page"])
+        form.grid(row=1, column=0, sticky="nw", padx=(0, 30))
+        label(form, "Name", t).pack(anchor="w")
         self.name_var = tk.StringVar(value=sigil.name if sigil else "")
         self._entry(form, self.name_var).pack(anchor="w", fill="x", pady=(2, 14))
 
-        label(form, "When I draw it, open a…").pack(anchor="w")
+        label(form, "When I draw it, open a…", t).pack(anchor="w")
         self.kind_var = tk.StringVar(value=sigil.action["type"] if sigil else "app")
         for kind, text in actions.KINDS.items():
             tk.Radiobutton(form, text=text, value=kind, variable=self.kind_var,
-                           command=self._kind_changed, bg=BG, fg=TEXT, selectcolor=PANEL_HI,
-                           activebackground=BG, activeforeground=GOLD, font=FONT,
+                           command=self._kind_changed, bg=t["page"], fg=t["ink"],
+                           selectcolor=t["field"], activebackground=t["page"],
+                           activeforeground=t["accent"], font=t["font_body"],
                            cursor="hand2").pack(anchor="w")
 
-        self.target_label = label(form)
+        self.target_label = label(form, "", t)
         self.target_label.pack(anchor="w", pady=(14, 0))
-        target_row = tk.Frame(form, bg=BG)
+        target_row = tk.Frame(form, bg=t["page"])
         target_row.pack(anchor="w", fill="x", pady=2)
         self.target_var = tk.StringVar(value=sigil.action["target"] if sigil else "")
-        self._entry(target_row, self.target_var, width=30).pack(side="left")
-        self.browse_btn = button(target_row, "Browse…", self.browse)
+        self._entry(target_row, self.target_var, width=28).pack(side="left")
+        self.browse_btn = button(target_row, "Browse…", self.browse, t)
         self.browse_btn.pack(side="left", padx=(6, 0))
-        self.target_hint = label(form, muted=True, font=FONT_SMALL, wraplength=300)
+        self.target_hint = label(form, "", t, muted=True, font="small", wraplength=300)
         self.target_hint.pack(anchor="w")
 
-        pad_col = tk.Frame(win, bg=BG)
-        pad_col.grid(row=0, column=1, sticky="n")
-        label(pad_col, "Draw the sigil").pack(anchor="w")
-        label(pad_col, f"Draw it {RECOMMENDED_SAMPLES} times the same way so it's easy to "
-              "recognize.", muted=True, font=FONT_SMALL).pack(anchor="w", pady=(0, 6))
-        self.pad = DrawPad(pad_col, size=300, bg=INK_BG, guide=PANEL_HI,
-                           on_change=self._update_buttons)
-        self.pad.pack()
-        pad_buttons = tk.Frame(pad_col, bg=BG)
-        pad_buttons.pack(fill="x", pady=8)
-        button(pad_buttons, "Clear", self.pad.clear).pack(side="left")
-        self.add_btn = button(pad_buttons, "Add this drawing", self.add_sample, primary=True)
-        self.add_btn.pack(side="right")
-        self.samples_frame = tk.Frame(pad_col, bg=BG)
-        self.samples_frame.pack(fill="x")
+        label(form, "Your drawings", t).pack(anchor="w", pady=(22, 0))
+        label(form, f"Draw it {RECOMMENDED_SAMPLES} times the same way so it's easy to\n"
+              "recognize. Click a drawing to remove it.", t, muted=True,
+              font="small").pack(anchor="w")
+        self.samples_frame = tk.Frame(form, bg=t["page"])
+        self.samples_frame.pack(anchor="w", fill="x", pady=(6, 0))
 
-        bottom = tk.Frame(win, bg=BG)
-        bottom.grid(row=1, column=0, columnspan=2, sticky="e", pady=(18, 0))
-        button(bottom, "Cancel", win.destroy).pack(side="left", padx=8)
-        button(bottom, "Save sigil", self.save, primary=True).pack(side="left")
+        pad_col = tk.Frame(win, bg=t["page"])
+        pad_col.grid(row=1, column=1, sticky="n")
+        self._build_toolbar(pad_col)
+        self.pad = DrawPad(pad_col, size=pad_size, bg=t["field"], guide=t["field_line"],
+                           on_change=self._update_buttons, ink=t["accent"], style=self.style)
+        self.pad.configure(highlightthickness=1, highlightbackground=t["field_line"])
+        self.pad.pack(pady=(8, 0))
+        pad_buttons = tk.Frame(pad_col, bg=t["page"])
+        pad_buttons.pack(fill="x", pady=8)
+        button(pad_buttons, "Clear", self.pad.clear, t).pack(side="left")
+        button(pad_buttons, "↶ Undo", self.pad.undo, t).pack(side="left", padx=6)
+        self.add_btn = button(pad_buttons, "Add this drawing", self.add_sample, t, primary=True)
+        self.add_btn.pack(side="right")
+
+        bottom = tk.Frame(win, bg=t["page"])
+        bottom.grid(row=2, column=0, columnspan=2, sticky="e", pady=(6, 0))
+        button(bottom, "Cancel", win.destroy, t).pack(side="left", padx=8)
+        button(bottom, "Save sigil", self.save, t, primary=True).pack(side="left")
 
         win.bind("<Escape>", lambda e: win.destroy())
+        win.bind("<Control-z>", lambda e: self.pad.undo())
         self._kind_changed()
         self._render_samples()
+        self._style_changed()
+        self._center()
         win.grab_set()
         win.focus_force()
 
-    def _entry(self, parent: tk.Misc, var: tk.StringVar, width: int = 38) -> tk.Entry:
-        return tk.Entry(parent, textvariable=var, width=width, bg=PANEL, fg=TEXT,
-                        insertbackground=GOLD, relief="flat", font=FONT,
-                        highlightthickness=1, highlightbackground=PANEL_HI,
-                        highlightcolor=GOLD)
+    def _center(self) -> None:
+        win, root = self.win, self.book.root
+        win.update_idletasks()
+        w, h = win.winfo_reqwidth(), win.winfo_reqheight()
+        x = root.winfo_rootx() + (root.winfo_width() - w) // 2
+        y = root.winfo_rooty() + (root.winfo_height() - h) // 2
+        x = max(0, min(x, win.winfo_screenwidth() - w))
+        y = max(0, min(y, win.winfo_screenheight() - h - 48))
+        win.geometry(f"+{x}+{y}")
+
+    # ---- pen toolbar ---------------------------------------------------------
+
+    def _build_toolbar(self, parent: tk.Misc) -> None:
+        t = self.t
+        bar = tk.Frame(parent, bg=t["page"])
+        bar.pack(fill="x")
+
+        pens = tk.Frame(bar, bg=t["page"])
+        pens.pack(fill="x")
+        label(pens, "Pen", t, font="small").pack(side="left", padx=(0, 8))
+        self.pen_buttons: dict[str, tk.Button] = {}
+        for pen, name in PENS.items():
+            b = button(pens, name, lambda p=pen: self._set_style(pen=p), t)
+            b.configure(padx=9, pady=3, font=t["font_small"])
+            b.pack(side="left", padx=(0, 4))
+            self.pen_buttons[pen] = b
+
+        row = tk.Frame(bar, bg=t["page"])
+        row.pack(fill="x", pady=(8, 0))
+        label(row, "Size", t, font="small").pack(side="left", padx=(0, 4))
+        self.size_var = tk.IntVar(value=self.style["size"])
+        tk.Scale(row, from_=MIN_SIZE, to=MAX_SIZE, orient="horizontal", length=130,
+                 variable=self.size_var, showvalue=False, bg=t["page"], fg=t["ink"],
+                 troughcolor=t["field"], highlightthickness=0, bd=0, sliderlength=16,
+                 activebackground=t["accent"],
+                 command=lambda v: self._set_style(size=int(float(v)))).pack(side="left")
+        self.size_label = label(row, "", t, font="small", width=3)
+        self.size_label.pack(side="left")
+        self.preview = tk.Canvas(row, width=96, height=40, bg=t["field"], highlightthickness=1,
+                                 highlightbackground=t["field_line"])
+        self.preview.pack(side="left", padx=(6, 14))
+
+        label(row, "Color", t, font="small").pack(side="left", padx=(0, 4))
+        self.swatches: dict[str | None, tk.Canvas] = {}
+        for color in [None, *PALETTE]:
+            sw = tk.Canvas(row, width=20, height=20, highlightthickness=2, cursor="hand2",
+                           bg=color or t["accent"], highlightbackground=t["page"])
+            sw.create_rectangle(0, 0, 19, 19, outline=t["field_line"])
+            if color is None:  # the grimoire's own ink
+                sw.create_text(10, 10, text="✦", fill=t["page"], font=("Segoe UI Symbol", 8))
+            sw.pack(side="left", padx=1)
+            sw.bind("<Button-1>", lambda e, c=color: self._set_style(color=c))
+            self.swatches[color] = sw
+        more = button(row, "More…", self._pick_color, t)
+        more.configure(padx=7, pady=1, font=t["font_small"])
+        more.pack(side="left", padx=(6, 0))
+
+    def _pick_color(self) -> None:
+        _, color = colorchooser.askcolor(color=self.pad.color, parent=self.win,
+                                         title="Pick an ink color")
+        if color:
+            self._set_style(color=color)
+
+    def _set_style(self, **changes) -> None:
+        self.style.update(changes)
+        self._style_changed()
+
+    def _style_changed(self) -> None:
+        t, style = self.t, self.style
+        self.pad.set_style(style)
+        for pen, b in self.pen_buttons.items():
+            on = pen == style["pen"]
+            b.configure(bg=t["accent"] if on else t["field"], fg=t["on_accent"] if on else t["ink"])
+        for color, sw in self.swatches.items():
+            on = color == style["color"]
+            sw.configure(highlightbackground=t["ink"] if on else t["page"])
+        if self.size_var.get() != style["size"]:
+            self.size_var.set(style["size"])
+        self.size_label.configure(text=str(style["size"]))
+        self.preview.delete("all")
+        wave = [(10 + i * 4, 20 + math.sin(i / 2.6) * 9) for i in range(20)]
+        render_stroke(self.preview, wave, style["pen"], style["size"], self.pad.color, t["field"])
+        self._render_samples()
+
+    def _entry(self, parent: tk.Misc, var: tk.StringVar, width: int = 36) -> tk.Entry:
+        t = self.t
+        return tk.Entry(parent, textvariable=var, width=width, bg=t["field"], fg=t["ink"],
+                        insertbackground=t["accent"], relief="flat", font=t["font_body"],
+                        highlightthickness=1, highlightbackground=t["field_line"],
+                        highlightcolor=t["accent"])
 
     def _kind_changed(self) -> None:
         kind = self.kind_var.get()
@@ -358,19 +674,21 @@ class SigilEditor:
         self._render_samples()
 
     def _render_samples(self) -> None:
+        t = self.t
         for child in self.samples_frame.winfo_children():
             child.destroy()
         n = len(self.samples)
         text = (f"{n} of {RECOMMENDED_SAMPLES} drawings" if n < RECOMMENDED_SAMPLES
-                else f"{n} drawings ✓") + ("  ·  click one to remove it" if n else "")
-        label(self.samples_frame, text, muted=True, font=FONT_SMALL).pack(anchor="w")
-        strip = tk.Frame(self.samples_frame, bg=BG)
-        strip.pack(anchor="w", pady=4)
+                else f"{n} drawings ✓")
+        label(self.samples_frame, text, t, muted=True, font="small").pack(anchor="w")
+        grid = tk.Frame(self.samples_frame, bg=t["page"])
+        grid.pack(anchor="w", pady=4)
         for i, sample in enumerate(self.samples):
-            thumb = tk.Canvas(strip, width=52, height=52, bg=INK_BG, highlightthickness=1,
-                              highlightbackground=PANEL_HI, cursor="hand2")
-            thumb.pack(side="left", padx=(0, 6))
-            draw_strokes(thumb, sample, 6, 6, 40, 40, GOLD, 2)
+            thumb = tk.Canvas(grid, width=88, height=88, bg=t["field"], highlightthickness=1,
+                              highlightbackground=t["field_line"], cursor="hand2")
+            thumb.grid(row=i // 3, column=i % 3, padx=(0, 8), pady=(0, 8))
+            draw_strokes(thumb, sample, 8, 8, 72, 72, t["accent"], 2, style=self.style,
+                         bg=t["field"])
             thumb.bind("<Button-1>", lambda e, i=i: self.remove_sample(i))
         self._update_buttons()
 
@@ -426,15 +744,17 @@ class SigilEditor:
                     "out (click it) for better recognition.\n\nSave anyway?", parent=win):
                 return
 
-        sigil = store.Sigil(name, {"type": kind, "target": target}, self.samples)
+        sigil = store.Sigil(name, {"type": kind, "target": target}, self.samples,
+                            style=dict(self.style))
         if self.original is None:
             others.append(sigil)
         else:
             i = next(i for i, s in enumerate(sigils) if s.name == self.original.name)
             others.insert(i, sigil)
         store.save(others)
+        self.book.selected = name
         self.book.refresh()
-        self.book.set_status(f"Saved {name}.")
+        self.book.set_status(f"Inscribed {name}.")
         win.destroy()
 
 
@@ -446,6 +766,7 @@ class CastOrb:
 
     def __init__(self, book: SigilBook):
         self.book = book
+        t = book.theme
         win = self.win = tk.Toplevel(book.root)
         win.overrideredirect(True)
         win.attributes("-topmost", True)
@@ -459,14 +780,15 @@ class CastOrb:
         canvas = tk.Canvas(win, width=size, height=size, bg=self.KEY, highlightthickness=0,
                            cursor="hand2")
         canvas.pack()
-        canvas.create_oval(3, 3, size - 3, size - 3, fill=PANEL, outline=GOLD, width=3)
-        canvas.create_text(size / 2, size / 2, text="✦", fill=GOLD, font=("Segoe UI", 20))
+        canvas.create_oval(3, 3, size - 3, size - 3, fill=t["page"], outline=t["accent"], width=3)
+        canvas.create_oval(9, 9, size - 9, size - 9, outline=t["accent"], width=1)
+        canvas.create_text(size / 2, size / 2, text="✦", fill=t["accent"], font=("Segoe UI", 20))
 
         self.menu = tk.Menu(win, tearoff=False)
         self.menu.add_command(label="Cast a sigil", command=lambda: book.app.summon())
         self.menu.add_command(label="Open Sigil Book", command=book.show)
         self.menu.add_separator()
-        self.menu.add_command(label="Hide this button", command=self._hide)
+        self.menu.add_command(label="Hide this button", command=book.toggle_orb)
 
         canvas.bind("<ButtonPress-1>", self._press)
         canvas.bind("<B1-Motion>", self._drag)
@@ -491,10 +813,6 @@ class CastOrb:
             self.book.save_orb_position(self.win.winfo_x(), self.win.winfo_y())
         else:
             self.book.app.summon()
-
-    def _hide(self) -> None:
-        self.book.orb_var.set(False)
-        self.book.toggle_orb()
 
 
 def main() -> None:

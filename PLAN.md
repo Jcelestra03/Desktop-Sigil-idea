@@ -31,9 +31,21 @@ Python standard library only (tkinter + ctypes), so there is nothing to install.
 
 ### Where it stands
 
-There is currently a **mock build**: it works end to end (Sigil Book window, sigil editor,
-floating ✦ button, overlay, recognizer), but we've decided we want to **change the look
-and theme of the window** to make it more attractive before handing it to Jun.
+There was a **mock build**: it worked end to end (Sigil Book window, sigil editor,
+floating ✦ button, overlay, recognizer), but we decided to **change the look and theme of
+the window** to make it more attractive before handing it to Jun.
+
+The window is now drawn as an **open grimoire**, in two versions you can switch between at
+the top of the window (the choice is remembered):
+
+- **Parchment**: aged pages with faint rune writing and stains, red-ink seals, gilt edges,
+  on white fur with an amethyst sphere, crystal ball, twigs, beads and a red ribbon.
+- **Obsidian**: black pages with gold ink, a bone-bead strand down the spine and a quill,
+  on teal wood with black candles, seal coins and parchment scraps.
+
+Left page: the *Sigil Index* (turn pages with ◂ ▸ or the mouse wheel). Right page: the
+selected sigil's seal and the actions. Next: decide with Tiffany which version (or both)
+Jun gets by default.
 
 ## Ideas we considered first
 
@@ -69,6 +81,7 @@ apps), which hotkey we use, and what we polish in week 2.
 | --- | --- | --- |
 | Overlay window, drawing, visual feel | Jcelestra03 | `sigil/overlay.py`, `sigil/drawpad.py` |
 | Sigil Book window, editor, floating ✦ button, launcher | Jcelestra03 | `sigil/manager.py`, `Desktop Sigil.pyw` |
+| Grimoire look: the two themes and the book drawing | Jcelestra03 | `sigil/themes.py`, `sigil/grimoire.py` |
 | Global hotkey + main run loop | Jcelestra03 | `sigil/hotkey.py`, `sigil/app.py` |
 | Recognizer | Tiffany | `sigil/recognizer.py`, `tests/test_recognizer.py` |
 | Sigil + settings storage, command line | Tiffany | `sigil/store.py`, `sigil/__main__.py` |
@@ -115,7 +128,10 @@ Changing this signature needs both of us to agree, in a PR.
 
 ## Backlog (pick from here, in order of what Jun cares about)
 
-- [ ] Redesign the look and theme of the Sigil Book window so it's more attractive
+- [x] Redesign the look and theme of the Sigil Book window so it's more attractive
+  (open grimoire, Parchment and Obsidian versions)
+- [x] Bigger sigil editor with Paint-style pens, sizes and colors (saved with each sigil)
+- [ ] Pick Jun's default grimoire; theme the drawing overlay to match (red / gold ink)
 - [ ] Preload sigils for Jun's games and apps
 - [x] Settings window to add/remove sigils without the command line (Sigil Book)
 - [x] A way to cast without the hotkey (floating ✦ button)
