@@ -305,7 +305,9 @@ class SigilBook:
                 self._line(cx, "No sigils inscribed yet.", "head"),
                 1.1 * self._em("body"),
                 self._line(cx, "Choose “Inscribe a new sigil” on the right page,\n"
-                               "pick what it opens, and draw its shape.", "body", t["ink_soft"]),
+                               "pick what it opens, and draw its shape. Or choose\n"
+                               "“Receive a sigil” to add one a friend sent you.", "body",
+                           t["ink_soft"]),
             ])
             return
 
@@ -361,13 +363,17 @@ class SigilBook:
                     self._line(cx, "Draw a sigil to open a program, website,\nfile or folder. "
                                    "Pick one from the index to see it here.", "body", t["ink_soft"])]
         n = len(sigil.templates)
-        spread = min(6.5 * eb, width / 3)
+        row = [("Edit", lambda: self.edit(sigil), None),
+               ("Test it", lambda: self.app.summon(dry_run=True), None),
+               ("Share", lambda: self.share(sigil), None),
+               ("Erase", lambda: self.delete(sigil), t["accent"])]
+        spread = min(5.2 * eb, width / len(row))
 
         def buttons(y):
             base = y + CAP * eb
-            self._button(cx - spread, base, "Edit", lambda: self.edit(sigil))
-            self._button(cx, base, "Test it", lambda: self.app.summon(dry_run=True))
-            self._button(cx + spread, base, "Erase", lambda: self.delete(sigil), color=t["accent"])
+            for i, (text, command, color) in enumerate(row):
+                self._button(cx + (i - (len(row) - 1) / 2) * spread, base, text, command,
+                             color=color)
 
         return [0.9 * eb,
                 self._line(cx, OPENS.get(sigil.action["type"], "Opens"), "small", t["ink_soft"]),
@@ -378,6 +384,13 @@ class SigilBook:
                 1.4 * eb,
                 (CAP * eb, buttons)]
 
+    def _action_lines(self) -> list[tuple[str, Callable[[], None], str | None, str | None]]:
+        t = self.theme
+        return [("✒  Inscribe a new sigil", self.new_sigil, t["accent"], t["ink"]),
+                ("✦  Cast a sigil", lambda: self.app.summon(), None, None),
+                ("◉  Test a drawing", lambda: self.app.summon(dry_run=True), None, None),
+                ("✉  Receive a sigil", self.receive, None, None)]
+
     def _right_need(self) -> float:
         """Height the right page needs with the current type, with the smallest seal."""
         s = self._right_spacing()
@@ -385,7 +398,8 @@ class SigilBook:
         fake = store.Sigil("x", {"type": "app", "target": "x"}, [])
         details = sum(p if isinstance(p, (int, float)) else p[0]
                       for p in self._details(0, x1 - x0, fake))
-        actions_h = (6 + s["to_status"] + s["to_hotkey"] + 2 * s["pitch"] + s["divider"]
+        actions_h = (6 + s["to_status"] + s["to_hotkey"]
+                     + (len(self._action_lines()) - 1) * s["pitch"] + s["divider"]
                      + s["body_gap"])
         if not self._switches_fit(x1 - x0):
             actions_h += s["hotkey_line"]
@@ -434,10 +448,8 @@ class SigilBook:
                              command, "small", color=t["ink_soft"])
             hot_top = hot - s["hotkey_line"]
 
-        lines = [("✒  Inscribe a new sigil", self.new_sigil, t["accent"], t["ink"]),
-                 ("✦  Cast a sigil", lambda: self.app.summon(), None, None),
-                 ("◉  Test a drawing", lambda: self.app.summon(dry_run=True), None, None)]
-        first = hot_top - s["to_hotkey"] - 2 * s["pitch"]
+        lines = self._action_lines()
+        first = hot_top - s["to_hotkey"] - (len(lines) - 1) * s["pitch"]
         # a left-aligned list (so the icons line up), centered on the page as a block
         ax = cx - max(self._font("button").measure(text) for text, *_ in lines) / 2
         for i, (text, command, color, hover) in enumerate(lines):
@@ -528,6 +540,14 @@ class SigilBook:
 
     def new_sigil(self) -> None:
         SigilEditor(self, None)
+
+    def share(self, sigil: store.Sigil) -> None:
+        from .share_dialogs import ShareDialog
+        ShareDialog(self, sigil)
+
+    def receive(self) -> None:
+        from .share_dialogs import ReceiveDialog
+        ReceiveDialog(self)
 
     def edit(self, sigil: store.Sigil) -> None:
         SigilEditor(self, sigil)

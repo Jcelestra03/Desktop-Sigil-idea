@@ -165,7 +165,7 @@ Agents append here too (see `CLAUDE.md`).
 
 ---
 
-## 2026-11-08 — Even text layout in the Sigil Book (pixelgaming457 (Tifanie Ngo), with Claude)
+## 2026-11-08 — Even text layout in the Sigil Book (pixelgaming457 (Tifanie Ngo), with Claude, in 'tifanie-branch')
 
 **Why**
 - Text on the pages didn't look even, especially after resizing: positions were fixed
@@ -192,3 +192,42 @@ Agents append here too (see `CLAUDE.md`).
 - Screenshots at 1000×680, 1160×760 and 1600×1000, both grimoires, empty / selected /
   several folios, and at 150 % scaling. Simulated clicks: select, turn page, switch theme,
   long status, wrapped hotkey line.
+
+---
+
+## 2026-11-08 — Share sigils with friends (pixelgaming457 (Tifanie Ngo), with Claude, in 'tifanie-branch')
+
+**Why**
+- Tifanie wanted people to send each other sigils and use them on their own PC, as a
+  file or as a short text code.
+
+**Changed**
+- New `sigil/share.py` (no tkinter): `.sigil` files (JSON) and `SIGIL1-` text codes
+  (drawings packed as small steps, zlib, URL-safe base64; simplified only as much as needed
+  to stay under 1,000 characters when possible and always under 1,800, so a code fits one
+  Discord message). Codes are found inside a longer message and survive line breaks.
+- Paths are portable: `%LOCALAPPDATA%`, `%APPDATA%`, `%USERPROFILE%`, Program Files etc.
+  are swapped in when sending and filled in on the receiver's PC; both Program Files
+  folders are tried. Unknown placeholders count as not found.
+- Safety: everything from outside is validated (types, sizes, pens, colors, a cap on
+  decompressed size). Nothing runs on import. `review()` flags scripts, programs outside
+  usual install folders or in Temp, `.exe` "files", and non-http links; the receiver must
+  tick *I trust who sent this* to add those.
+- New `sigil/share_dialogs.py`: **Share** button next to Edit / Test it / Erase (save file
+  or copy code); **✉ Receive a sigil** on the right page (open file or paste code, shows
+  the seal, what it opens and whether it's found, Browse… to relink, name clash → "Name
+  (2)" or Replace, and *Add my own drawing after this* opens the editor).
+- `manager.py`: the Share button, the Receive action, the right page now lays out four
+  action lines.
+
+**Verified**
+- `python -m unittest`: 40 tests pass (new `tests/test_share.py`: portable paths, both
+  Program Files, unknown places, review notes, code and file round trips, codes inside chat
+  messages, very busy drawings still fit and still recognize, damaged codes and bad fields
+  refused, name clashes).
+- Screenshots of the Share and Receive dialogs in both grimoires (found, not found,
+  risky), and the book at 1000×680 with the new buttons.
+- Simulated: receive a code → Browse to a local copy → add; receive a clashing file →
+  Replace → editor opens; risky sigil needs *I trust*; damaged code shows an error; Share
+  saves a file that loads back.
+- Not yet: tried between two real Windows PCs.

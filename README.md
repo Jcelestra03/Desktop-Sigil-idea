@@ -40,6 +40,28 @@ with the mouse, and it casts: Steam opens, or Canvas, or your notes folder.
 
 Keep the Sigil Book open (minimizing is fine) for the ✦ button and the hotkey to work.
 
+### Sharing sigils
+
+Select a sigil and click **Share**. You can **Save .sigil file…** and send the file, or
+**Copy code** and paste the code (it starts with `SIGIL1-`) into Discord, a text or an
+email. One code always fits in one Discord message.
+
+To add one someone sent you, click **✉ Receive a sigil**, then open their `.sigil` file or
+paste their code (a copied code is filled in for you, and it still works if the chat app
+split it over several lines).
+
+- **Their paths become yours.** Folders that differ between computers are sent as
+  placeholders (`%LOCALAPPDATA%\Discord\Update.exe`), so it points to your copy. Steam and
+  other programs are also looked for in the other Program Files folder. If it's still not
+  found, click **Browse…** and pick your copy.
+- **Nothing runs when you receive a sigil.** You see what it opens first. Scripts
+  (`.bat`, `.ps1`…), programs outside the usual install folders, and links that open other
+  programs get a warning, and you have to tick *I trust who sent this* to add them.
+- **Add your own drawing.** The drawings are the sender's, so the sigil may not always
+  recognize the way you draw it. Leave *Add my own drawing after this* ticked and the
+  editor opens so you can add one.
+- Already have a sigil with that name? It's added as "Canvas (2)", or tick *Replace*.
+
 ### More
 
 - **Test a drawing** shows which sigil a drawing matches without opening anything.
@@ -78,5 +100,5 @@ Because it compares point clouds, stroke order and direction don't matter.
 
 ## Team
 
-Jcelestra03 and Tiffany, TCSS 490 Fall 2026. See `PLAN.md` for the plan and `LOG.md`
+Jcelestra03 and Tifanie, TCSS 490 Fall 2026. See `PLAN.md` for the plan and `LOG.md`
 for what's changed.

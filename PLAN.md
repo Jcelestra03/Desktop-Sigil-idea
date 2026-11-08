@@ -44,7 +44,7 @@ the top of the window (the choice is remembered):
   on teal wood with black candles, seal coins and parchment scraps.
 
 Left page: the *Sigil Index* (turn pages with ◂ ▸ or the mouse wheel). Right page: the
-selected sigil's seal and the actions. Next: decide with Tiffany which version (or both)
+selected sigil's seal and the actions. Next: decide with Tifanie which version (or both)
 Jun gets by default.
 
 ## Ideas we considered first
@@ -83,8 +83,9 @@ apps), which hotkey we use, and what we polish in week 2.
 | Sigil Book window, editor, floating ✦ button, launcher | Jcelestra03 | `sigil/manager.py`, `Desktop Sigil.pyw` |
 | Grimoire look: the two themes and the book drawing | Jcelestra03 | `sigil/themes.py`, `sigil/grimoire.py` |
 | Global hotkey + main run loop | Jcelestra03 | `sigil/hotkey.py`, `sigil/app.py` |
-| Recognizer | Tiffany | `sigil/recognizer.py`, `tests/test_recognizer.py` |
-| Sigil + settings storage, command line | Tiffany | `sigil/store.py`, `sigil/__main__.py` |
+| Recognizer | Tifanie | `sigil/recognizer.py`, `tests/test_recognizer.py` |
+| Sigil + settings storage, command line | Tifanie | `sigil/store.py`, `sigil/__main__.py` |
+| Sharing sigils (.sigil files, text codes) | Jcelestra03 | `sigil/share.py`, `sigil/share_dialogs.py`, `tests/test_share.py` |
 | Actions (launching apps / URLs) | shared | `sigil/actions.py` |
 | Docs, plan, log | shared | `*.md` |
 
@@ -108,7 +109,7 @@ Changing this signature needs both of us to agree, in a PR.
 ## How we avoid colliding
 
 1. `main` always runs. Nobody commits directly to `main` after the initial setup commit.
-2. One branch per task: `<name>/<short-topic>`, e.g. `tiffany/recognizer-threshold`,
+2. One branch per task: `<name>/<short-topic>`, e.g. `Tifanie/recognizer-threshold`,
    `jcelestra/overlay-glow`.
 3. Open a pull request; the **other** person reviews and merges it.
 4. Before opening a PR: `python -m unittest` passes, and add a line to `LOG.md`.
@@ -138,5 +139,7 @@ Changing this signature needs both of us to agree, in a PR.
 - [ ] Start with Windows (shortcut in the Startup folder) + tray icon
 - [ ] Multi-monitor overlay (currently primary monitor only)
 - [ ] Nicer "casting" animation (glow, fade, rune circle)
+- [x] Share sigils with friends: .sigil files and text codes (Share / Receive a sigil)
+- [ ] Double-click a .sigil file to open it in Desktop Sigil (file association)
 - [ ] Tune the match threshold with real drawings (ours, then Jun's)
 - [x] Configurable hotkey (`--hotkey`, `SIGIL_HOTKEY`)
