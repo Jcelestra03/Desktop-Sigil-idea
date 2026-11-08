@@ -66,13 +66,34 @@ class SigilApp:
             pass
         self.root.after(POLL_MS, self._poll)
 
-    def summon(self, dry_run: bool = False) -> None:
-        """Open the overlay. With dry_run, report what would open instead of opening it."""
+    def _can_open(self) -> bool:
         if self.overlay_open:
-            return
+            return False
         if self.root.grab_current() is not None:
             # A dialog (e.g. the sigil editor) holds the mouse; an overlay would get no input
             self.on_status("Finish or close the open dialog first.")
+            return False
+        return True
+
+    def practice(self, prompt: str,
+                 on_done: Callable[[list[Stroke] | None], str | None]) -> bool:
+        """Open the overlay for a practice drawing (the tutorial). on_done gets the strokes
+        (None if cancelled) and may return a message to flash. Nothing is cast."""
+        if not self._can_open():
+            return False
+        self.overlay_open = True
+
+        def done(strokes: list[Stroke] | None) -> str | None:
+            self.overlay_open = False
+            return on_done(strokes)
+
+        Overlay(self.root, prompt, done,
+                hint="Practice: nothing will open  ·  Enter to cast  ·  Esc to cancel")
+        return True
+
+    def summon(self, dry_run: bool = False) -> None:
+        """Open the overlay. With dry_run, report what would open instead of opening it."""
+        if not self._can_open():
             return
         sigils = store.load()  # reload so sigils added while running are picked up
         if not sigils:

@@ -31,6 +31,8 @@ is for developers.
   writing, redrawn on every click by `draw_pages`).
 - `sigil/drawpad.py` — drawing canvas used in the editor, Paint-style pens (`PENS`,
   `render_stroke`), and thumbnail drawing. Pens only change looks; never the points.
+- `sigil/tutorial.py` — the guided tour (drawn on the book canvas, tag `tour`), the
+  optional practice cast, and `HELP`: the short text behind every "?" button.
 - `sigil/recognizer.py` — $P point-cloud recognizer. Pure functions, no tkinter.
 - `sigil/store.py` — loads/saves `sigils.json` and `settings.json` (gitignored, per-user).
 - `sigil/actions.py` — runs a sigil's action; tidies typed targets (adds https://).

@@ -14,6 +14,11 @@ with the mouse, and it casts: Steam opens, or Canvas, or your notes folder.
 
 ## Getting started
 
+**New here?** The first time the Sigil Book opens, it offers a quick tour (about a minute),
+ending with an optional practice cast where you draw a circle and nothing opens. Click
+**✦ Tutorial** at the top of the window to see it again. Every button also has a small
+**?** next to it: hover over it for a short explanation.
+
 1. **Double-click `Desktop Sigil.pyw`.** The *Sigil Book* opens: an open grimoire with
    your *Sigil Index* on the left page. A small ✦ button appears near the bottom-right of
    your screen. Switch between the **Parchment** and **Obsidian** grimoire at the top.

@@ -81,6 +81,7 @@ apps), which hotkey we use, and what we polish in week 2.
 | --- | --- | --- |
 | Overlay window, drawing, visual feel | Jcelestra03 | `sigil/overlay.py`, `sigil/drawpad.py` |
 | Sigil Book window, editor, floating ✦ button, launcher | Jcelestra03 | `sigil/manager.py`, `Desktop Sigil.pyw` |
+| Tutorial tour and "?" help | Jcelestra03 | `sigil/tutorial.py`, `tests/test_tutorial.py` |
 | Grimoire look: the two themes and the book drawing | Jcelestra03 | `sigil/themes.py`, `sigil/grimoire.py` |
 | Global hotkey + main run loop | Jcelestra03 | `sigil/hotkey.py`, `sigil/app.py` |
 | Recognizer | Tifanie | `sigil/recognizer.py`, `tests/test_recognizer.py` |
@@ -132,6 +133,8 @@ Changing this signature needs both of us to agree, in a PR.
 - [x] Redesign the look and theme of the Sigil Book window so it's more attractive
   (open grimoire, Parchment and Obsidian versions)
 - [x] Bigger sigil editor with Paint-style pens, sizes and colors (saved with each sigil)
+- [x] Tutorial: a guided tour on first launch (replay with ✦ Tutorial), an optional practice
+  cast, and a "?" next to every button
 - [ ] Pick Jun's default grimoire; theme the drawing overlay to match (red / gold ink)
 - [ ] Preload sigils for Jun's games and apps
 - [x] Settings window to add/remove sigils without the command line (Sigil Book)

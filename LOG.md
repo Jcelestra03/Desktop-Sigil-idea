@@ -243,3 +243,33 @@ Agents append here too (see `CLAUDE.md`).
   resolved with her versions; nothing from `jem-branch` was lost.
 - Verified: all tests pass, and the Sigil Book opens with the grimoire, pens, Share and
   Receive.
+
+---
+
+## 2026-11-08 — Tutorial and "?" help (Jcelestra03, with Claude)
+
+- **Guided tour** (`sigil/tutorial.py`): the first time the Sigil Book opens, a card asks
+  "Want a quick tour?". *Show me around* walks through the grimoire switch, the Sigil
+  Index, Inscribe, Cast, Test, Receive/Share and the hotkey/✦ button, outlining each part
+  on the page with a card beside it (Back / Skip tour / Next). *Not now* closes it, and it
+  doesn't come back on its own (`tutorial_seen` in settings.json). **✦ Tutorial** at the
+  top of the window replays it.
+- **Optional practice cast** at the end of the tour: draw a circle on the dimmed screen.
+  It is checked against built-in practice shapes (circle, triangle, cross, lightning bolt,
+  line), so nothing is saved or opened; the card says whether it read a circle and how
+  closely. The last card offers *Inscribe my first sigil* when the book is empty.
+- **"?" next to every button**: hover over it (or click it) for a one-or-two-sentence
+  explanation. On the book: Grimoire, Sigil Index, the four actions, Edit / Test it /
+  Share / Erase, Hotkey and Floating ✦ button. In the editor: Name, What it opens, the
+  target, Your drawings, Pen, Size, Color, Clear, Undo, Add this drawing, Save sigil.
+- `SigilApp.practice()` opens the overlay for a drawing that isn't cast (same "no overlay
+  while a dialog holds a grab" rule as `summon`).
+
+**Verified**
+- `python -m unittest`: 47 tests pass (new `tests/test_tutorial.py`: every help key used
+  exists, a hand-drawn circle is read as a circle and other shapes aren't, the tour starts
+  once on first launch, every step outlines its part and has buttons, book buttons have
+  help).
+- Screenshots of every tour card in both grimoires, a tooltip, the practice result (a
+  simulated circle, 72 % match), the editor's "?" marks, and a selected sigil's row.
+- Not yet: someone new trying the tour for real.

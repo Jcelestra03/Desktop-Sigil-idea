@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from tkinter import colorchooser, filedialog, messagebox, simpledialog
 from typing import Callable
 
-from . import actions, grimoire, store, themes
+from . import actions, grimoire, store, themes, tutorial
 from .app import SigilApp
 from .drawpad import DEFAULT_STYLE, MAX_SIZE, MIN_SIZE, PENS, DrawPad, draw_strokes, render_stroke
 from .hotkey import parse as parse_hotkey, pretty
@@ -54,6 +54,8 @@ class Hit:
     item: int | None = None
     color: str = ""
     hover: str = ""
+    tip: str = ""         # a tutorial.HELP key: hovering shows that explanation
+    pointer: bool = True  # show the hand cursor
 
 
 class SigilBook:
@@ -79,6 +81,8 @@ class SigilBook:
         self._resize_job: str | None = None
         self._fonts: dict[str, tkfont.Font] = {}
         self._scale = 1.0
+        self.regions: dict[str, tuple[float, float, float, float]] = {}  # for the tour
+        self.tour: tutorial.Tour | None = None
 
         self.canvas = tk.Canvas(root, highlightthickness=0, bg=self.theme["desk"])
         self.canvas.pack(fill="both", expand=True)
@@ -94,6 +98,8 @@ class SigilBook:
         if self.settings["orb"]:
             self.show_orb()
         root.deiconify()
+        if not self.settings.get("tutorial_seen"):
+            root.after(500, self.start_tour)
 
     # ---- drawing ------------------------------------------------------------
 
@@ -124,7 +130,8 @@ class SigilBook:
         c = self.canvas
         c.delete("fg")
         self.hits = []
-        self._hover = None
+        self._set_hover(None)
+        self.regions = {"index": self.layout.left}
         self._draw_theme_switch()
         self._draw_index(self.layout.left)
         self._draw_right(self.layout.right)
@@ -132,6 +139,8 @@ class SigilBook:
             if not c.gettags(item):
                 c.addtag_withtag("fg", item)
         c.tag_raise("front")
+        if self.tour:
+            self.tour.draw()
 
     # ---- type ---------------------------------------------------------------
     # Text is placed by its baseline and spaced in ems (the font size in pixels) instead of
@@ -184,6 +193,28 @@ class SigilBook:
         self.hits.append(Hit(box, command, on_double, item, color, hover or t["accent"]))
         return box
 
+    def _help(self, box, key: str, x: float | None = None, y: float | None = None) -> None:
+        """A small circled "?" at the top right of a button's box (or at x, y); hovering it
+        shows tutorial.HELP[key]."""
+        t, c = self.theme, self.canvas
+        r = max(6.0, 0.55 * self._em("small"))
+        cx = (box[2] if x is None else x) + r
+        cy = (box[1] if y is None else y) + r
+        color = t["ink_soft"]
+        c.create_oval(cx - r, cy - r, cx + r, cy + r, outline=color)
+        item = c.create_text(cx, cy, text="?", fill=color,
+                             font=(t["font_small"][0], -round(r * 1.35), "bold"))
+        hit = Hit((cx - r - 2, cy - r - 2, cx + r + 2, cy + r + 2), lambda: None, None, item,
+                  color, t["accent"], tip=key)
+        hit.on_click = lambda: self._show_tip(hit)
+        self.hits.append(hit)
+
+    def _show_tip(self, hit: Hit) -> None:
+        x0, _, x1, y1 = hit.box
+        c = self.canvas
+        tutorial.show_tip(c, c.winfo_rootx() + (x0 + x1) / 2, c.winfo_rooty() + y1, hit.tip,
+                          self.theme)
+
     def _line(self, cx, text, font, color=None) -> tuple[float, Callable[[float], None]]:
         """A part for _stack: centered text, measured from cap height to the last baseline."""
         em = self._em(font)
@@ -224,13 +255,16 @@ class SigilBook:
         et = self._em("title")
         return 6 + CAP * et + 0.5 * et + 0.9 * self._em("body")
 
-    def _header(self, rect, title: str) -> float:
+    def _header(self, rect, title: str, help_key: str | None = None) -> float:
         """Page title and ✦ divider, at the same height on both pages. Returns where the
         page body starts."""
         x0, y0, x1, y1 = rect
         cx, et = (x0 + x1) / 2, self._em("title")
         base = y0 + 6 + CAP * et
-        self._write(cx, base, self._fit(title, "title", x1 - x0), "title")
+        item = self._write(cx, base, self._fit(title, "title", x1 - x0), "title")
+        if help_key:
+            # Gabriola's line box is much taller than its letters: sit at the cap height
+            self._help(self.canvas.bbox(item), help_key, y=base - CAP * et - 2)
         self._divider(cx, base + 0.5 * et, (x1 - x0) / 2 - 20)
         return y0 + self._header_height()
 
@@ -267,8 +301,12 @@ class SigilBook:
         choices = list(themes.THEMES.values())
         widths = [self._font("body").measure(c["label"]) for c in choices]
         label_w = self._font("small").measure(label)
-        x = self.layout.gutter - (label_w + 0.6 * gap + sum(widths) + gap * (len(choices) - 1)) / 2
-        self._write(x, base, label, "small", t["desk_text"], anchor="w")
+        # then a "?", a dot, and the tutorial (here, because props cover the band's corners)
+        tutorial_text = "✦ Tutorial"
+        tail = 1.7 * gap + self._font("body").measure(tutorial_text)
+        x = self.layout.gutter - (label_w + 0.6 * gap + sum(widths) + gap * (len(choices) - 1)
+                                  + tail) / 2
+        first = self.canvas.bbox(self._write(x, base, label, "small", t["desk_text"], anchor="w"))
         x += label_w + 0.6 * gap
         for theme, w in zip(choices, widths):
             box = self._button(x, base, theme["label"], lambda n=theme["name"]: self.set_theme(n),
@@ -277,6 +315,13 @@ class SigilBook:
                 uy = base + 0.4 * eb
                 self.canvas.create_line(x, uy, x + w, uy, fill=t["accent"], width=2)
             x += w + gap
+        self.regions["theme"] = (first[0], box[1], box[2], box[3])
+        self._help(box, "theme")
+        x = box[2] + gap
+        self._write(x, base, "·", "body", t["desk_text"])
+        self.regions["tutorial"] = self._button(x + 0.7 * gap, base, tutorial_text,
+                                                self.start_tour, "body", anchor="w",
+                                                color=t["desk_text"])
 
     # ---- left page: the index ------------------------------------------------
 
@@ -290,7 +335,7 @@ class SigilBook:
         t, c = self.theme, self.canvas
         x0, y0, x1, y1 = rect
         cx = (x0 + x1) / 2
-        top = self._header(rect, "Sigil Index")
+        top = self._header(rect, "Sigil Index", "index")
         foot = self._footer(rect)
         bottom = foot - 1.8 * self._em("small")
 
@@ -363,17 +408,18 @@ class SigilBook:
                     self._line(cx, "Draw a sigil to open a program, website,\nfile or folder. "
                                    "Pick one from the index to see it here.", "body", t["ink_soft"])]
         n = len(sigil.templates)
-        row = [("Edit", lambda: self.edit(sigil), None),
-               ("Test it", lambda: self.app.summon(dry_run=True), None),
-               ("Share", lambda: self.share(sigil), None),
-               ("Erase", lambda: self.delete(sigil), t["accent"])]
+        row = [("Edit", lambda: self.edit(sigil), None, "edit"),
+               ("Test it", lambda: self.app.summon(dry_run=True), None, "test_it"),
+               ("Share", lambda: self.share(sigil), None, "share"),
+               ("Erase", lambda: self.delete(sigil), t["accent"], "erase")]
         spread = min(5.2 * eb, width / len(row))
 
         def buttons(y):
             base = y + CAP * eb
-            for i, (text, command, color) in enumerate(row):
-                self._button(cx + (i - (len(row) - 1) / 2) * spread, base, text, command,
-                             color=color)
+            for i, (text, command, color, key) in enumerate(row):
+                box = self._button(cx + (i - (len(row) - 1) / 2) * spread, base, text, command,
+                                   color=color)
+                self._help(box, key)
 
         return [0.9 * eb,
                 self._line(cx, OPENS.get(sigil.action["type"], "Opens"), "small", t["ink_soft"]),
@@ -384,12 +430,13 @@ class SigilBook:
                 1.4 * eb,
                 (CAP * eb, buttons)]
 
-    def _action_lines(self) -> list[tuple[str, Callable[[], None], str | None, str | None]]:
+    def _action_lines(self) -> list[tuple[str, Callable[[], None], str | None, str | None, str]]:
+        """(text, command, color, hover color, tutorial key) of the right page's actions."""
         t = self.theme
-        return [("✒  Inscribe a new sigil", self.new_sigil, t["accent"], t["ink"]),
-                ("✦  Cast a sigil", lambda: self.app.summon(), None, None),
-                ("◉  Test a drawing", lambda: self.app.summon(dry_run=True), None, None),
-                ("✉  Receive a sigil", self.receive, None, None)]
+        return [("✒  Inscribe a new sigil", self.new_sigil, t["accent"], t["ink"], "inscribe"),
+                ("✦  Cast a sigil", lambda: self.app.summon(), None, None, "cast"),
+                ("◉  Test a drawing", lambda: self.app.summon(dry_run=True), None, None, "test"),
+                ("✉  Receive a sigil", self.receive, None, None, "receive")]
 
     def _right_need(self) -> float:
         """Height the right page needs with the current type, with the smallest seal."""
@@ -407,13 +454,14 @@ class SigilBook:
 
     def _switches(self) -> list[tuple[str, Callable[[], None]]]:
         orb = f"Floating ✦ button: {'on' if self.settings['orb'] else 'off'}"
-        return [(self.hotkey_text, self.change_hotkey), (orb, self.toggle_orb)]
+        return [(self.hotkey_text, self.change_hotkey, "hotkey"), (orb, self.toggle_orb, "orb")]
 
     def _switches_fit(self, width: float) -> bool:
         """Whether the hotkey and floating-button switches fit side by side."""
         small = self._font("small")
-        return (sum(small.measure(text) for text, _ in self._switches())
-                + 2 * self._em("small")) <= width
+        # each switch is followed by a "?" (about 1.4 em)
+        return (sum(small.measure(text) for text, *_ in self._switches())
+                + 5 * self._em("small")) <= width
 
     def _status_room(self) -> float:
         x0, _, x1, _ = self.layout.right
@@ -433,28 +481,39 @@ class SigilBook:
         self.status_item = self._write(cx, foot, self._fit(self.status, "italic", self._status_room()),
                                        "italic", t["ink_soft"])
         switches = self._switches()
-        widths = [self._font("small").measure(text) for text, _ in switches]
-        gap = 2 * self._em("small")
+        es = self._em("small")
+        widths = [self._font("small").measure(text) + 1.4 * es for text, *_ in switches]
+        gap = 2 * es
         hot = foot - s["to_status"]
+        boxes = []
         if self._switches_fit(width):       # one line, centered as a pair
             x = cx - (sum(widths) + gap) / 2
-            for (text, command), w in zip(switches, widths):
-                self._button(x, hot, text, command, "small", anchor="w", color=t["ink_soft"])
+            for (text, command, key), w in zip(switches, widths):
+                boxes.append(self._button(x, hot, text, command, "small", anchor="w",
+                                          color=t["ink_soft"]))
+                self._help(boxes[-1], key)
                 x += w + gap
             hot_top = hot
         else:                               # too narrow: one per line
-            for i, (text, command) in enumerate(switches):
-                self._button(cx, hot - (1 - i) * s["hotkey_line"], self._fit(text, "small", width),
-                             command, "small", color=t["ink_soft"])
+            for i, (text, command, key) in enumerate(switches):
+                boxes.append(self._button(cx, hot - (1 - i) * s["hotkey_line"],
+                                          self._fit(text, "small", width - 3 * es), command,
+                                          "small", color=t["ink_soft"]))
+                self._help(boxes[-1], key)
             hot_top = hot - s["hotkey_line"]
+        self.regions["switches"] = (min(b[0] for b in boxes), min(b[1] for b in boxes),
+                                    max(b[2] for b in boxes) + 1.4 * es, max(b[3] for b in boxes))
 
         lines = self._action_lines()
         first = hot_top - s["to_hotkey"] - (len(lines) - 1) * s["pitch"]
         # a left-aligned list (so the icons line up), centered on the page as a block
-        ax = cx - max(self._font("button").measure(text) for text, *_ in lines) / 2
-        for i, (text, command, color, hover) in enumerate(lines):
-            self._button(ax, first + i * s["pitch"], text, command, anchor="w", color=color,
-                         hover=hover)
+        longest = max(self._font("button").measure(text) for text, *_ in lines)
+        ax = cx - longest / 2
+        for i, (text, command, color, hover, key) in enumerate(lines):
+            box = self._button(ax, first + i * s["pitch"], text, command, anchor="w", color=color,
+                               hover=hover)
+            self.regions[key] = box
+            self._help(box, key, x=ax + longest + 6)  # the "?"s line up in a column
         divider = first - s["divider"]
         self._divider(cx, divider, width / 2 - 20)
 
@@ -481,12 +540,18 @@ class SigilBook:
     def _set_hover(self, hit: Hit | None) -> None:
         if hit is self._hover:
             return
-        if self._hover and self._hover.item:
-            self.canvas.itemconfigure(self._hover.item, fill=self._hover.color)
+        old = self._hover
+        if old and old.item and self.canvas.find_withtag(old.item):
+            self.canvas.itemconfigure(old.item, fill=old.color)
+        if old and old.tip:
+            tutorial.hide_tip()
         self._hover = hit
         if hit and hit.item:
             self.canvas.itemconfigure(hit.item, fill=hit.hover)
-        self.canvas.configure(cursor="hand2" if hit else "")
+        if hit and hit.tip:
+            self._show_tip(hit)
+        self.canvas.configure(cursor=("question_arrow" if hit.tip else "hand2")
+                              if hit and hit.pointer else "")
 
     def _on_motion(self, event: tk.Event) -> None:
         self._set_hover(self._hit_at(event.x, event.y))
@@ -537,6 +602,15 @@ class SigilBook:
         item = getattr(self, "status_item", None)
         if item and self.canvas.find_withtag(item):
             self.canvas.itemconfigure(item, text=self._fit(text, "italic", self._status_room()))
+
+    def start_tour(self) -> None:
+        """Start (or restart) the guided tour from its first card."""
+        if not self.settings.get("tutorial_seen"):
+            self.settings["tutorial_seen"] = True
+            store.save_settings(self.settings)
+        self.tour = tutorial.Tour(self)
+        if hasattr(self, "layout"):
+            self.draw_pages()
 
     def new_sigil(self) -> None:
         SigilEditor(self, None)
@@ -670,11 +744,11 @@ class SigilEditor:
 
         form = tk.Frame(win, bg=t["page"])
         form.grid(row=1, column=0, sticky="nw", padx=(0, 30))
-        label(form, "Name", t).pack(anchor="w")
+        self._titled(form, "Name", "name").pack(anchor="w")
         self.name_var = tk.StringVar(value=sigil.name if sigil else "")
         self._entry(form, self.name_var).pack(anchor="w", fill="x", pady=(2, 14))
 
-        label(form, "When I draw it, open a…", t).pack(anchor="w")
+        self._titled(form, "When I draw it, open a…", "kind").pack(anchor="w")
         self.kind_var = tk.StringVar(value=sigil.action["type"] if sigil else "app")
         for kind, text in actions.KINDS.items():
             tk.Radiobutton(form, text=text, value=kind, variable=self.kind_var,
@@ -683,8 +757,9 @@ class SigilEditor:
                            activeforeground=t["accent"], font=t["font_body"],
                            cursor="hand2").pack(anchor="w")
 
-        self.target_label = label(form, "", t)
-        self.target_label.pack(anchor="w", pady=(14, 0))
+        target_title = self._titled(form, "", "target")
+        self.target_label = target_title.winfo_children()[0]
+        target_title.pack(anchor="w", pady=(14, 0))
         target_row = tk.Frame(form, bg=t["page"])
         target_row.pack(anchor="w", fill="x", pady=2)
         self.target_var = tk.StringVar(value=sigil.action["target"] if sigil else "")
@@ -694,7 +769,7 @@ class SigilEditor:
         self.target_hint = label(form, "", t, muted=True, font="small", wraplength=300)
         self.target_hint.pack(anchor="w")
 
-        label(form, "Your drawings", t).pack(anchor="w", pady=(22, 0))
+        self._titled(form, "Your drawings", "drawings").pack(anchor="w", pady=(22, 0))
         label(form, f"Draw it {RECOMMENDED_SAMPLES} times the same way so it's easy to\n"
               "recognize. Click a drawing to remove it.", t, muted=True,
               font="small").pack(anchor="w")
@@ -711,7 +786,10 @@ class SigilEditor:
         pad_buttons = tk.Frame(pad_col, bg=t["page"])
         pad_buttons.pack(fill="x", pady=8)
         button(pad_buttons, "Clear", self.pad.clear, t).pack(side="left")
-        button(pad_buttons, "↶ Undo", self.pad.undo, t).pack(side="left", padx=6)
+        tutorial.help_mark(pad_buttons, "clear", t).pack(side="left", padx=(3, 10))
+        button(pad_buttons, "↶ Undo", self.pad.undo, t).pack(side="left")
+        tutorial.help_mark(pad_buttons, "undo", t).pack(side="left", padx=3)
+        tutorial.help_mark(pad_buttons, "add", t).pack(side="right", padx=(3, 0))
         self.add_btn = button(pad_buttons, "Add this drawing", self.add_sample, t, primary=True)
         self.add_btn.pack(side="right")
 
@@ -719,6 +797,7 @@ class SigilEditor:
         bottom.grid(row=2, column=0, columnspan=2, sticky="e", pady=(6, 0))
         button(bottom, "Cancel", win.destroy, t).pack(side="left", padx=8)
         button(bottom, "Save sigil", self.save, t, primary=True).pack(side="left")
+        tutorial.help_mark(bottom, "save", t).pack(side="left", padx=(3, 0))
 
         win.bind("<Escape>", lambda e: win.destroy())
         win.bind("<Control-z>", lambda e: self.pad.undo())
@@ -728,6 +807,13 @@ class SigilEditor:
         self._center()
         win.grab_set()
         win.focus_force()
+
+    def _titled(self, parent: tk.Misc, text: str, key: str) -> tk.Frame:
+        """A label with a "?" after it."""
+        row = tk.Frame(parent, bg=self.t["page"])
+        label(row, text, self.t).pack(side="left")
+        tutorial.help_mark(row, key, self.t).pack(side="left", padx=(4, 0))
+        return row
 
     def _center(self) -> None:
         win, root = self.win, self.book.root
@@ -748,7 +834,8 @@ class SigilEditor:
 
         pens = tk.Frame(bar, bg=t["page"])
         pens.pack(fill="x")
-        label(pens, "Pen", t, font="small").pack(side="left", padx=(0, 8))
+        label(pens, "Pen", t, font="small").pack(side="left")
+        tutorial.help_mark(pens, "pen", t).pack(side="left", padx=(2, 8))
         self.pen_buttons: dict[str, tk.Button] = {}
         for pen, name in PENS.items():
             b = button(pens, name, lambda p=pen: self._set_style(pen=p), t)
@@ -758,7 +845,8 @@ class SigilEditor:
 
         row = tk.Frame(bar, bg=t["page"])
         row.pack(fill="x", pady=(8, 0))
-        label(row, "Size", t, font="small").pack(side="left", padx=(0, 4))
+        label(row, "Size", t, font="small").pack(side="left")
+        tutorial.help_mark(row, "size", t).pack(side="left", padx=(2, 4))
         self.size_var = tk.IntVar(value=self.style["size"])
         tk.Scale(row, from_=MIN_SIZE, to=MAX_SIZE, orient="horizontal", length=130,
                  variable=self.size_var, showvalue=False, bg=t["page"], fg=t["ink"],
@@ -771,7 +859,8 @@ class SigilEditor:
                                  highlightbackground=t["field_line"])
         self.preview.pack(side="left", padx=(6, 14))
 
-        label(row, "Color", t, font="small").pack(side="left", padx=(0, 4))
+        label(row, "Color", t, font="small").pack(side="left")
+        tutorial.help_mark(row, "color", t).pack(side="left", padx=(2, 4))
         self.swatches: dict[str | None, tk.Canvas] = {}
         for color in [None, *PALETTE]:
             sw = tk.Canvas(row, width=20, height=20, highlightthickness=2, cursor="hand2",
