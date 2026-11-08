@@ -29,6 +29,12 @@ which suits sigils. No machine learning, no training data beyond the user's own 
 
 Python standard library only (tkinter + ctypes), so there is nothing to install.
 
+**Install for people who don't use Python:** `python build_exe.py` builds
+`Desktop Sigil.exe` and a zip (`dist/Desktop-Sigil-Windows.zip`): unzip, double-click the
+.exe. This uses **PyInstaller, only as a build tool**: it's never needed to run the app,
+and the app code stays standard library only. Per our rule on third-party tools,
+Tifanie: please OK this in the PR (or say no and we go back to the .pyw only).
+
 ### Where it stands
 
 There was a **mock build**: it worked end to end (Sigil Book window, sigil editor,
@@ -82,6 +88,7 @@ apps), which hotkey we use, and what we polish in week 2.
 | Overlay window, drawing, visual feel | Jcelestra03 | `sigil/overlay.py`, `sigil/drawpad.py` |
 | Sigil Book window, editor, floating ✦ button, launcher | Jcelestra03 | `sigil/manager.py`, `Desktop Sigil.pyw` |
 | Tutorial tour and "?" help | Jcelestra03 | `sigil/tutorial.py`, `tests/test_tutorial.py` |
+| The .exe build and app icon | Jcelestra03 | `build_exe.py`, `tools/make_icon.py`, `assets/` |
 | Grimoire look: the two themes and the book drawing | Jcelestra03 | `sigil/themes.py`, `sigil/grimoire.py` |
 | Global hotkey + main run loop | Jcelestra03 | `sigil/hotkey.py`, `sigil/app.py` |
 | Recognizer | Tifanie | `sigil/recognizer.py`, `tests/test_recognizer.py` |
@@ -139,6 +146,8 @@ Changing this signature needs both of us to agree, in a PR.
 - [ ] Preload sigils for Jun's games and apps
 - [x] Settings window to add/remove sigils without the command line (Sigil Book)
 - [x] A way to cast without the hotkey (floating ✦ button)
+- [x] Install without Python: `Desktop Sigil.exe` in a zip (`python build_exe.py`)
+- [ ] An installer (Setup.exe with Start menu shortcut and uninstall, e.g. Inno Setup)
 - [ ] Start with Windows (shortcut in the Startup folder) + tray icon
 - [ ] Multi-monitor overlay (currently primary monitor only)
 - [ ] Nicer "casting" animation (glow, fade, rune circle)

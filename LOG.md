@@ -273,3 +273,29 @@ Agents append here too (see `CLAUDE.md`).
 - Screenshots of every tour card in both grimoires, a tooltip, the practice result (a
   simulated circle, 72 % match), the editor's "?" marks, and a selected sigil's row.
 - Not yet: someone new trying the tour for real.
+
+---
+
+## 2026-11-08 — Desktop Sigil.exe: install without Python (Jcelestra03, with Claude)
+
+- Installing Python was the hardest step for people who don't use it, so
+  `python build_exe.py` now builds **Desktop Sigil.exe** (PyInstaller, one folder) and
+  zips it as `dist/Desktop-Sigil-Windows.zip` with a *How to open.txt*: unzip, double-click
+  the .exe, and on the first run click *More info → Run anyway* past SmartScreen (the app
+  isn't code-signed).
+- The .exe keeps sigils and settings in `%APPDATA%\Desktop Sigil` (set by the launcher, so
+  `store.py` is unchanged) so they survive replacing the folder with a newer build. Run
+  from source, they stay next to the code as before.
+- New app icon (a red seal with a ✦), drawn by `tools/make_icon.py` with the standard
+  library; used for the .exe and every window.
+- **PyInstaller is a build tool only**: the app still needs nothing outside the standard
+  library. It still needs Tifanie's OK under our third-party rule (noted in PLAN).
+- `build/` and `dist/` are gitignored.
+
+**Verified**
+- Built with Python 3.14.5 and PyInstaller 6.22.3 (zip: 12.9 MB). Unzipped into a clean
+  folder and ran with an empty APPDATA: the Sigil Book opened with the seal icon and the
+  first-launch tour, the hotkey registered, and settings.json was written to
+  `%APPDATA%\Desktop Sigil`.
+- `python -m unittest` passes.
+- Not yet: tried on a PC that has never had Python installed.

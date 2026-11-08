@@ -8,9 +8,25 @@ with the mouse, and it casts: Steam opens, or Canvas, or your notes folder.
 
 ## Requirements
 
-- Windows 10 or 11
-- Python 3.11 or newer from [python.org](https://www.python.org/downloads/) (tkinter is
-  included). No other packages.
+Windows 10 or 11. (It doesn't run on Mac or Linux.)
+
+## Install
+
+**Easiest: no Python needed.** Get `Desktop-Sigil-Windows.zip`, then:
+
+1. Right-click it → **Extract All…** → **Extract**.
+2. Open the **Desktop Sigil** folder and double-click **Desktop Sigil.exe**.
+3. The first time, Windows may say *"Windows protected your PC"*, because the app isn't
+   signed by a big company. Click **More info**, then **Run anyway**.
+
+To put it on your desktop: right-click **Desktop Sigil.exe** → *Show more options* →
+*Send to* → *Desktop (create shortcut)*. Keep the `_internal` folder next to the .exe.
+Your sigils and settings are saved in `%APPDATA%\Desktop Sigil`, so they stay when you
+replace the folder with a newer version.
+
+**From the source code** (needs Python 3.11 or newer from
+[python.org](https://www.python.org/downloads/); tkinter is included, no other packages):
+double-click `Desktop Sigil.pyw`. Sigils and settings are saved next to this README.
 
 ## Getting started
 
@@ -19,7 +35,7 @@ ending with an optional practice cast where you draw a circle and nothing opens.
 **✦ Tutorial** at the top of the window to see it again. Every button also has a small
 **?** next to it: hover over it for a short explanation.
 
-1. **Double-click `Desktop Sigil.pyw`.** The *Sigil Book* opens: an open grimoire with
+1. **Double-click `Desktop Sigil.exe`** (or `Desktop Sigil.pyw` from the source code). The *Sigil Book* opens: an open grimoire with
    your *Sigil Index* on the left page. A small ✦ button appears near the bottom-right of
    your screen. Switch between the **Parchment** and **Obsidian** grimoire at the top.
 2. Click **✒ Inscribe a new sigil** on the right page:
@@ -94,7 +110,17 @@ python -m sigil list
 python -m sigil remove "Canvas"
 python -m sigil test
 python -m unittest                                # run the tests
+python build_exe.py                               # build the .exe and its zip (below)
 ```
+
+### Building the .exe
+
+`build_exe.py` packs the app and Python into `dist/Desktop Sigil/` (the `.exe` plus an
+`_internal` folder) with [PyInstaller](https://pyinstaller.org), and zips it as
+`dist/Desktop-Sigil-Windows.zip` with a short *How to open.txt*. PyInstaller is only
+needed to build (`python -m pip install pyinstaller`); the app itself stays standard
+library only. `build/` and `dist/` are gitignored, so send the zip, don't commit it. The
+icon is drawn by `tools/make_icon.py` into `assets/sigil.ico`.
 
 ## How recognition works
 

@@ -64,6 +64,10 @@ class SigilBook:
         root.title("Desktop Sigil — Sigil Book")
         root.geometry("1160x760")
         root.minsize(1000, 680)
+        icon = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                            "assets", "sigil.ico")
+        if os.path.exists(icon):  # the seal icon, for this window and every dialog
+            root.iconbitmap(default=icon)
         root.protocol("WM_DELETE_WINDOW", self.quit)
 
         self.settings = store.load_settings()

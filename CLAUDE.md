@@ -22,6 +22,8 @@ window. Keep it that way — every user-facing feature belongs in the window, an
 is for developers.
 
 - `Desktop Sigil.pyw` — double-click launcher; shows a dialog + `sigil-error.log` on crash.
+  Also the entry point of the .exe, which keeps data in `%APPDATA%\Desktop Sigil`.
+- `build_exe.py`, `tools/make_icon.py`, `assets/sigil.ico` — the .exe build and its icon.
 - `sigil/manager.py` — Sigil Book main window (an open grimoire drawn on one Canvas, with
   coordinate-based click areas instead of widgets), sigil editor dialog, floating ✦ button.
 - `sigil/themes.py` — the two looks, Parchment and Obsidian. Both dicts must have the same
@@ -46,6 +48,8 @@ is for developers.
 - Open the app: double-click `Desktop Sigil.pyw`, or `python -m sigil`
 - Hotkey only, no window: `python -m sigil run`
 - Tests: `python -m unittest`
+- Build the .exe + zip for people without Python: `python build_exe.py` (needs
+  `pip install pyinstaller`; build tool only, the app stays standard library only)
 - Try things without touching your real sigils: set `SIGIL_FILE` to a temp path first.
 
 ## Rules for agents

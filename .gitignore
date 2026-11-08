@@ -10,3 +10,8 @@ venv/
 .vscode/
 .idea/
 .claude/settings.local.json
+
+# Built app (python build_exe.py)
+build/
+dist/
+*.spec
