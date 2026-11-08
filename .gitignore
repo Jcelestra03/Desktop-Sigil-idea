@@ -1,5 +1,7 @@
 # Personal sigils (each user's own drawings and app paths)
 sigils.json
+settings.json
+sigil-error.log
 
 __pycache__/
 *.pyc

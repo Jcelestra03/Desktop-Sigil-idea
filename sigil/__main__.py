@@ -11,6 +11,13 @@ from .hotkey import DEFAULT_HOTKEY
 from .recognizer import DEFAULT_MIN_SCORE, compare, recognize
 
 
+def cmd_book(args: argparse.Namespace) -> int:
+    from .manager import main as book
+
+    book()
+    return 0
+
+
 def cmd_run(args: argparse.Namespace) -> int:
     try:
         app.run(args.hotkey)
@@ -115,7 +122,10 @@ def cmd_test(args: argparse.Namespace) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m sigil", description="Desktop Sigil")
-    sub = parser.add_subparsers(dest="command", required=True)
+    sub = parser.add_subparsers(dest="command")
+    parser.set_defaults(func=cmd_book)
+    sub.add_parser("book", help="open the Sigil Book window (the default)") \
+        .set_defaults(func=cmd_book)
 
     run = sub.add_parser("run", help="listen for the hotkey and cast sigils")
     run.add_argument("--hotkey", default=os.environ.get("SIGIL_HOTKEY", DEFAULT_HOTKEY),

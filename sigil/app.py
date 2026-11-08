@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import queue
+import tkinter as tk
+from typing import Callable
 
 from . import actions, store
-from .hotkey import DEFAULT_HOTKEY, HotkeyListener
+from .hotkey import DEFAULT_HOTKEY, HotkeyListener, pretty
 from .overlay import Overlay, make_root
 from .recognizer import Stroke, recognize
 
@@ -13,23 +15,46 @@ POLL_MS = 50
 
 
 class SigilApp:
-    def __init__(self, hotkey: str = DEFAULT_HOTKEY) -> None:
-        self.events: queue.Queue[str] = queue.Queue()
-        self.hotkey = HotkeyListener(lambda: self.events.put("summon"), hotkey)
-        self.root = make_root()
-        self.overlay_open = False
+    """Hotkey + overlay + recognizer. Used headless by `run` and by the Sigil Book window."""
 
-    def run(self) -> None:
-        self.hotkey.start()
-        print(f"Desktop Sigil is listening. Press {self.hotkey.hotkey.title()} to draw. "
-              "Ctrl+C here to quit.")
+    def __init__(self, root: tk.Tk | None = None,
+                 on_status: Callable[[str], None] | None = None) -> None:
+        self.events: queue.Queue[str] = queue.Queue()
+        self.hotkey: HotkeyListener | None = None
+        self.root = root or make_root()
+        self.on_status = on_status or print
+        self.overlay_open = False
         self.root.after(POLL_MS, self._poll)
+
+    def set_hotkey(self, hotkey: str) -> None:
+        """Listen for a new hotkey. Raises ValueError (bad name) or OSError (already in use);
+        on failure the previous hotkey keeps working."""
+        listener = HotkeyListener(lambda: self.events.put("summon"), hotkey)
+        old = self.hotkey
+        if old:
+            old.stop()
+        try:
+            listener.start()
+        except OSError:
+            if old:
+                self.hotkey = HotkeyListener(old.callback, old.hotkey)
+                self.hotkey.start()
+            raise
+        self.hotkey = listener
+
+    def stop(self) -> None:
+        if self.hotkey:
+            self.hotkey.stop()
+
+    def run(self, hotkey: str = DEFAULT_HOTKEY) -> None:
+        self.set_hotkey(hotkey)
+        print(f"Desktop Sigil is listening. Press {pretty(hotkey)} to draw. Ctrl+C here to quit.")
         try:
             self.root.mainloop()
         except KeyboardInterrupt:
             pass
         finally:
-            self.hotkey.stop()
+            self.stop()
 
     def _poll(self) -> None:
         # Runs on the main thread, so it is safe to touch tkinter here.
@@ -41,35 +66,45 @@ class SigilApp:
             pass
         self.root.after(POLL_MS, self._poll)
 
-    def summon(self) -> None:
+    def summon(self, dry_run: bool = False) -> None:
+        """Open the overlay. With dry_run, report what would open instead of opening it."""
         if self.overlay_open:
+            return
+        if self.root.grab_current() is not None:
+            # A dialog (e.g. the sigil editor) holds the mouse; an overlay would get no input
+            self.on_status("Finish or close the open dialog first.")
             return
         sigils = store.load()  # reload so sigils added while running are picked up
         if not sigils:
-            print('No sigils yet. Add one with: python -m sigil add "Name" --url https://...')
+            self.on_status("No sigils yet. Add one first.")
         self.overlay_open = True
-        Overlay(self.root, "✦", lambda strokes: self._cast(strokes, sigils))
+        prompt = "Test a sigil (nothing will open)" if dry_run else "✦"
+        Overlay(self.root, prompt, lambda strokes: self._cast(strokes, sigils, dry_run))
 
-    def _cast(self, strokes: list[Stroke] | None, sigils: list[store.Sigil]) -> str | None:
+    def _cast(self, strokes: list[Stroke] | None, sigils: list[store.Sigil],
+              dry_run: bool) -> str | None:
         self.overlay_open = False
         if strokes is None:
             return None
         match = recognize(strokes, sigils)
         if match is None:
-            print("No sigil recognized.")
+            self.on_status("No sigil recognized.")
             return "No sigil recognized"
         sigil = match.sigil
-        print(f"Cast {sigil.name} (score {match.score:.2f}) -> {actions.describe(sigil.action)}")
+        if dry_run:
+            self.on_status(f"That's {sigil.name} ({match.score:.0%} match). Nothing was opened.")
+            return f"{sigil.name}  ·  {match.score:.0%} match"
+        self.on_status(f"Cast {sigil.name} ({match.score:.0%} match).")
         try:
             actions.run(sigil.action)
         except OSError as e:
-            print(f"  Couldn't open it: {e}")
+            self.on_status(f"Couldn't open {sigil.name}: {e.strerror or e}")
             return f"Couldn't open {sigil.name}"
         return f"✦ {sigil.name}"
 
 
 def run(hotkey: str = DEFAULT_HOTKEY) -> None:
-    SigilApp(hotkey).run()
+    SigilApp().run(hotkey)
 
 
 def draw_once(prompt: str, hint: str | None = None) -> list[Stroke] | None:
