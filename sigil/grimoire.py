@@ -236,6 +236,8 @@ def _scraps(c, w, h, book, rng) -> None:
         for _ in range(16):
             gx = cx + rng.uniform(-sw / 2 + 12, sw / 2 - 12)
             gy = cy + rng.uniform(-sh / 2 + 10, sh / 2 - 10)
+            if gy < by0 and abs(gx - w / 2) < 170:
+                continue  # keep the Grimoire switch above the book readable
             c.create_text(gx, gy, text=rng.choice(RUNES + SYMBOLS), fill="#8a6136",
                           font=("Segoe UI Historic", 12))
 

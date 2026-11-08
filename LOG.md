@@ -162,3 +162,84 @@ Agents append here too (see `CLAUDE.md`).
   sigils, in both grimoires.
 - Not yet: drawing by hand with a real mouse, and the cast overlay still uses its own
   single pen.
+
+---
+
+## 2026-11-08 — Even text layout in the Sigil Book (pixelgaming457 (Tifanie Ngo), with Claude, in 'tifanie-branch')
+
+**Why**
+- Text on the pages didn't look even, especially after resizing: positions were fixed
+  pixel offsets, so on small windows the Edit / Test it / Erase row ran into the actions,
+  on big windows everything bunched at the top, and with Windows display scaling (125 %,
+  150 %) the bigger fonts overlapped the dividers.
+
+**Changed**
+- `manager.py`: text is placed by its baseline and spaced in ems (font size in pixels),
+  so gaps stay even at any size, scaling and font. Type grows a little on big windows and
+  shrinks on small ones so the right page always fits.
+- Both pages share one grid: the title and ✦ divider sit at the same height on both
+  pages (the right page's title is the selected sigil's name, or "Desktop Sigil"), and
+  the last lines (folio / status) share a baseline.
+- Right page: the seal and its details are centered in the space above the actions, and
+  the seal grows with the window. The three actions are centered as a block; the hotkey
+  and floating-button switches are centered and go on two lines when the page is narrow.
+- Index rows: seal and text are centered in each row; row height follows the font.
+- "Grimoire: Parchment Obsidian" is centered over the spine.
+- `grimoire.py`: runes on the Obsidian paper scraps skip the area behind the switch.
+
+**Verified**
+- `python -m unittest`: 24 tests pass.
+- Screenshots at 1000×680, 1160×760 and 1600×1000, both grimoires, empty / selected /
+  several folios, and at 150 % scaling. Simulated clicks: select, turn page, switch theme,
+  long status, wrapped hotkey line.
+
+---
+
+## 2026-11-08 — Share sigils with friends (pixelgaming457 (Tifanie Ngo), with Claude, in 'tifanie-branch')
+
+**Why**
+- Tifanie wanted people to send each other sigils and use them on their own PC, as a
+  file or as a short text code.
+
+**Changed**
+- New `sigil/share.py` (no tkinter): `.sigil` files (JSON) and `SIGIL1-` text codes
+  (drawings packed as small steps, zlib, URL-safe base64; simplified only as much as needed
+  to stay under 1,000 characters when possible and always under 1,800, so a code fits one
+  Discord message). Codes are found inside a longer message and survive line breaks.
+- Paths are portable: `%LOCALAPPDATA%`, `%APPDATA%`, `%USERPROFILE%`, Program Files etc.
+  are swapped in when sending and filled in on the receiver's PC; both Program Files
+  folders are tried. Unknown placeholders count as not found.
+- Safety: everything from outside is validated (types, sizes, pens, colors, a cap on
+  decompressed size). Nothing runs on import. `review()` flags scripts, programs outside
+  usual install folders or in Temp, `.exe` "files", and non-http links; the receiver must
+  tick *I trust who sent this* to add those.
+- New `sigil/share_dialogs.py`: **Share** button next to Edit / Test it / Erase (save file
+  or copy code); **✉ Receive a sigil** on the right page (open file or paste code, shows
+  the seal, what it opens and whether it's found, Browse… to relink, name clash → "Name
+  (2)" or Replace, and *Add my own drawing after this* opens the editor).
+- `manager.py`: the Share button, the Receive action, the right page now lays out four
+  action lines.
+
+**Verified**
+- `python -m unittest`: 40 tests pass (new `tests/test_share.py`: portable paths, both
+  Program Files, unknown places, review notes, code and file round trips, codes inside chat
+  messages, very busy drawings still fit and still recognize, damaged codes and bad fields
+  refused, name clashes).
+- Screenshots of the Share and Receive dialogs in both grimoires (found, not found,
+  risky), and the book at 1000×680 with the new buttons.
+- Simulated: receive a code → Browse to a local copy → add; receive a clashing file →
+  Replace → editor opens; risky sigil needs *I trust*; damaged code shows an error; Share
+  saves a file that loads back.
+- Not yet: tried between two real Windows PCs.
+
+---
+
+## 2026-11-08 — Merged `tifanie-branch` into `jem-branch` (Jcelestra03, with Claude)
+
+- Brought in Tifanie's even text layout and sigil sharing (Share / ✉ Receive, `.sigil`
+  files and `SIGIL1-` codes) so `jem-branch` has everyone's work.
+- Her branch already contained all of `jem-branch` (copied in, not branched from it), so
+  the five files both sides touched (`manager.py`, `grimoire.py`, README, PLAN, LOG) were
+  resolved with her versions; nothing from `jem-branch` was lost.
+- Verified: all tests pass, and the Sigil Book opens with the grimoire, pens, Share and
+  Receive.

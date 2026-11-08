@@ -27,7 +27,7 @@ from .recognizer import DEFAULT_MIN_SCORE, Stroke, compare, recognize
 from .themes import blend
 
 RECOMMENDED_SAMPLES = 3
-ROW_H = 76
+CAP = 0.7  # cap height as a share of the font size, for placing text by its baseline
 
 # ink colors in the editor, after the grimoire's own ink (black, crimson, gold, amethyst,
 # sapphire, emerald, amber, rose, teal, white, brown)
@@ -77,6 +77,8 @@ class SigilBook:
         self._hover: Hit | None = None
         self._size = (0, 0)
         self._resize_job: str | None = None
+        self._fonts: dict[str, tkfont.Font] = {}
+        self._scale = 1.0
 
         self.canvas = tk.Canvas(root, highlightthickness=0, bg=self.theme["desk"])
         self.canvas.pack(fill="both", expand=True)
@@ -114,6 +116,7 @@ class SigilBook:
         for item in c.find_all():
             if item not in before:
                 c.addtag_withtag("bg", item)
+        self._fit_type()
         self.draw_pages()
 
     def draw_pages(self) -> None:
@@ -130,25 +133,110 @@ class SigilBook:
                 c.addtag_withtag("fg", item)
         c.tag_raise("front")
 
+    # ---- type ---------------------------------------------------------------
+    # Text is placed by its baseline and spaced in ems (the font size in pixels) instead of
+    # fixed pixel offsets. That keeps the gaps even at any window size, at Windows display
+    # scaling (125 %, 150 %…), and with Gabriola, whose line box is much taller than its
+    # letters. The type itself grows a little on big windows and shrinks on small ones.
+
+    def _font(self, name: str) -> tkfont.Font:
+        f = self._fonts.get(name)
+        if f is None:
+            family, size, *style = self.theme[f"font_{name}"]
+            size = round(size * self._scale) if size > 0 else -round(-size * self._scale)
+            f = self._fonts[name] = tkfont.Font(root=self.root, family=family, size=size,
+                                                slant="italic" if "italic" in style else "roman")
+        return f
+
+    def _em(self, name: str) -> float:
+        size = self._font(name).actual("size")
+        return -size if size < 0 else size * self.root.winfo_fpixels("1p")
+
+    def _set_scale(self, scale: float) -> None:
+        self._scale = scale
+        self._fonts = {}
+
+    def _fit_type(self) -> None:
+        """Pick the type scale so the right page (the fullest one) fits the page height."""
+        self._set_scale(1.0)
+        x0, y0, x1, y1 = self.layout.right
+        fit = (y1 - y0) / self._right_need()
+        scale = fit if fit < 1 else min(1.25, 1 + (fit - 1) * 0.4)
+        self._set_scale(max(0.7, scale))
+
     def _text(self, x, y, text, font, color=None, **kw) -> int:
-        return self.canvas.create_text(x, y, text=text, font=self.theme[f"font_{font}"],
+        return self.canvas.create_text(x, y, text=text, font=self._font(font),
                                        fill=color or self.theme["ink"], **kw)
 
-    def _button(self, x, y, text, command, font="button", anchor="center", color=None,
+    def _write(self, x, base, text, font, color=None, anchor="center", **kw) -> int:
+        """Text whose first baseline sits at `base`; anchor is "w", "center" or "e"."""
+        y = base - self._font(font).metrics("ascent")
+        return self._text(x, y, text, font, color, anchor={"w": "nw", "center": "n", "e": "ne"}[anchor],
+                          **kw)
+
+    def _button(self, x, base, text, command, font="button", anchor="center", color=None,
                 hover=None, on_double=None) -> tuple[float, float, float, float]:
         t = self.theme
         color = color or t["ink"]
-        item = self._text(x, y, text, font, color, anchor=anchor)
+        item = self._write(x, base, text, font, color, anchor=anchor)
         x0, y0, x1, y1 = self.canvas.bbox(item)
         box = (x0 - 6, y0 - 3, x1 + 6, y1 + 3)
         self.hits.append(Hit(box, command, on_double, item, color, hover or t["accent"]))
         return box
 
+    def _line(self, cx, text, font, color=None) -> tuple[float, Callable[[float], None]]:
+        """A part for _stack: centered text, measured from cap height to the last baseline."""
+        em = self._em(font)
+        h = CAP * em + text.count("\n") * self._font(font).metrics("linespace")
+        return h, lambda y: self._write(cx, y + CAP * em, text, font, color, justify="center")
+
+    @staticmethod
+    def _stack(top, bottom, parts) -> None:
+        """Draw parts top to bottom as one block, centered between top and bottom.
+        A part is a gap (a number) or a (height, draw(y_top)) pair."""
+        total = sum(p if isinstance(p, (int, float)) else p[0] for p in parts)
+        y = top + max(0.0, (bottom - top - total) / 2)
+        for p in parts:
+            if isinstance(p, (int, float)):
+                y += p
+            else:
+                p[1](y)
+                y += p[0]
+
+    def _fit(self, text: str, font: str, width: float) -> str:
+        f = self._font(font)
+        if f.measure(text) <= width:
+            return text
+        while text and f.measure(text + "…") > width:
+            text = text[:-1]
+        return text + "…"
+
+    # ---- shared page parts ----------------------------------------------------
+
     def _divider(self, cx, y, half) -> None:
         t = self.theme
-        self.canvas.create_line(cx - half, y, cx - 16, y, fill=t["ink_soft"])
-        self.canvas.create_line(cx + 16, y, cx + half, y, fill=t["ink_soft"])
+        gap = self._em("small") * 1.2
+        self.canvas.create_line(cx - half, y, cx - gap, y, fill=t["ink_soft"])
+        self.canvas.create_line(cx + gap, y, cx + half, y, fill=t["ink_soft"])
         self._text(cx, y, "✦", "small", t["accent"])
+
+    def _header_height(self) -> float:
+        et = self._em("title")
+        return 6 + CAP * et + 0.5 * et + 0.9 * self._em("body")
+
+    def _header(self, rect, title: str) -> float:
+        """Page title and ✦ divider, at the same height on both pages. Returns where the
+        page body starts."""
+        x0, y0, x1, y1 = rect
+        cx, et = (x0 + x1) / 2, self._em("title")
+        base = y0 + 6 + CAP * et
+        self._write(cx, base, self._fit(title, "title", x1 - x0), "title")
+        self._divider(cx, base + 0.5 * et, (x1 - x0) / 2 - 20)
+        return y0 + self._header_height()
+
+    def _footer(self, rect) -> float:
+        """Baseline of the last line on both pages (folio on the left, status on the right)."""
+        return rect[3] - 6
 
     def _seal(self, cx, cy, r, strokes: list[Stroke] | None, width=3, runes=True,
               style: dict | None = None) -> None:
@@ -169,121 +257,217 @@ class SigilBook:
         elif strokes is None:
             c.create_text(cx, cy, text="✦", fill=t["accent"], font=("Segoe UI Symbol", int(r * .7)))
 
-    def _fit(self, text: str, font: str, width: float) -> str:
-        f = tkfont.Font(font=self.theme[f"font_{font}"])
-        if f.measure(text) <= width:
-            return text
-        while text and f.measure(text + "…") > width:
-            text = text[:-1]
-        return text + "…"
-
     def _draw_theme_switch(self) -> None:
+        """"Grimoire: Parchment Obsidian", centered over the spine in the band above the book."""
         t = self.theme
-        w = self.canvas.winfo_width()
-        y = 28
-        x = w / 2 - 110
-        self._text(x, y, "Grimoire:", "small", t["desk_text"], anchor="e")
-        for i, theme in enumerate(themes.THEMES.values()):
-            bx = x + 16 + i * 120
-            current = theme["name"] == t["name"]
-            box = self._button(bx, y, theme["label"], lambda n=theme["name"]: self.set_theme(n),
+        eb = self._em("body")
+        base = self.layout.book[1] / 2 + CAP * eb / 2
+        gap = 1.6 * eb
+        label = "Grimoire:"
+        choices = list(themes.THEMES.values())
+        widths = [self._font("body").measure(c["label"]) for c in choices]
+        label_w = self._font("small").measure(label)
+        x = self.layout.gutter - (label_w + 0.6 * gap + sum(widths) + gap * (len(choices) - 1)) / 2
+        self._write(x, base, label, "small", t["desk_text"], anchor="w")
+        x += label_w + 0.6 * gap
+        for theme, w in zip(choices, widths):
+            box = self._button(x, base, theme["label"], lambda n=theme["name"]: self.set_theme(n),
                                font="body", anchor="w", color=t["desk_text"])
-            if current:
-                self.canvas.create_line(box[0] + 6, box[3], box[2] - 6, box[3], fill=t["accent"],
-                                        width=2)
+            if theme["name"] == t["name"]:
+                uy = base + 0.4 * eb
+                self.canvas.create_line(x, uy, x + w, uy, fill=t["accent"], width=2)
+            x += w + gap
+
+    # ---- left page: the index ------------------------------------------------
+
+    def _row(self) -> tuple[float, float]:
+        """Seal radius and row height of the index."""
+        en = self._em("name")
+        r = round(1.05 * en)
+        return r, 2 * r + round(0.55 * en)
 
     def _draw_index(self, rect) -> None:
         t, c = self.theme, self.canvas
         x0, y0, x1, y1 = rect
         cx = (x0 + x1) / 2
-        self._text(cx, y0 + 4, "Sigil Index", "title", anchor="n")
-        self._divider(cx, y0 + 70, (x1 - x0) / 2 - 20)
+        top = self._header(rect, "Sigil Index")
+        foot = self._footer(rect)
+        bottom = foot - 1.8 * self._em("small")
 
-        top, bottom = y0 + 92, y1 - 40
-        per_page = max(1, int((bottom - top) // ROW_H))
+        r, row_h = self._row()
+        per_page = max(1, int((bottom - top) // row_h))
         pages = max(1, math.ceil(len(self.sigils) / per_page))
         self.folio = min(self.folio, pages - 1)
         shown = self.sigils[self.folio * per_page:(self.folio + 1) * per_page]
 
         if not self.sigils:
-            self._text(cx, top + 60, "No sigils inscribed yet.", "head", anchor="n")
-            self._text(cx, top + 110, "Choose “Inscribe a new sigil” on the right page,\n"
-                       "pick what it opens, and draw its shape.", "body", t["ink_soft"],
-                       anchor="n", justify="center")
+            self._stack(top, bottom, [
+                self._line(cx, "No sigils inscribed yet.", "head"),
+                1.1 * self._em("body"),
+                self._line(cx, "Choose “Inscribe a new sigil” on the right page,\n"
+                               "pick what it opens, and draw its shape. Or choose\n"
+                               "“Receive a sigil” to add one a friend sent you.", "body",
+                           t["ink_soft"]),
+            ])
             return
 
+        en, es = self._em("name"), self._em("small")
+        gap = 0.45 * en
+        block = CAP * en + gap + CAP * es        # name + detail, cap top to last baseline
+        tx = x0 + 2 * r + 0.6 * en
+        room = x1 - tx
+        inset = max(2, row_h * 0.04)
         for i, sigil in enumerate(shown):
-            ry = top + i * ROW_H
-            selected = sigil.name == self.selected
-            if selected:
-                c.create_rectangle(x0 - 10, ry - 4, x1 + 10, ry + ROW_H - 8,
-                                   fill=blend(t["page"], t["page_dark"], .35), outline="")
-                c.create_line(x0 - 10, ry - 4, x0 - 10, ry + ROW_H - 8, fill=t["accent"], width=3)
-            self._seal(x0 + 32, ry + 32, 30, sigil.templates[0] if sigil.templates else [],
+            ry = top + i * row_h
+            cy = ry + row_h / 2
+            band = (x0 - 10, ry + inset, x1 + 10, ry + row_h - inset)
+            if sigil.name == self.selected:
+                c.create_rectangle(*band, fill=blend(t["page"], t["page_dark"], .35), outline="")
+                c.create_line(band[0], band[1], band[0], band[3], fill=t["accent"], width=3)
+            self._seal(x0 + r + 2, cy, r, sigil.templates[0] if sigil.templates else [],
                        width=2, runes=False, style=sigil.style)
-            self._text(x0 + 78, ry + 18, self._fit(sigil.name, "name", x1 - x0 - 90), "name",
-                       anchor="w")
+            name_base = cy - block / 2 + CAP * en
+            self._write(tx, name_base, self._fit(sigil.name, "name", room), "name", anchor="w")
             kind = actions.KINDS.get(sigil.action["type"], sigil.action["type"])
-            detail = self._fit(f"{kind} · {sigil.action['target']}", "small", x1 - x0 - 90)
-            self._text(x0 + 78, ry + 46, detail, "small", t["ink_soft"], anchor="w")
-            self.hits.append(Hit((x0 - 10, ry - 4, x1 + 10, ry + ROW_H - 8),
-                                 lambda s=sigil: self.select(s.name),
+            detail = self._fit(f"{kind} · {sigil.action['target']}", "small", room)
+            self._write(tx, name_base + gap + CAP * es, detail, "small", t["ink_soft"], anchor="w")
+            self.hits.append(Hit(band, lambda s=sigil: self.select(s.name),
                                  lambda s=sigil: self.edit(s)))
 
-        folio = f"folio {self.folio + 1} of {pages}"
-        self._text(cx, y1 - 6, folio, "italic", t["ink_soft"], anchor="s")
+        self._write(cx, foot, f"folio {self.folio + 1} of {pages}", "italic", t["ink_soft"])
         if self.folio > 0:
-            self._button(x0, y1 - 14, "◂ turn back", lambda: self.turn(-1), "small", anchor="w")
+            self._button(x0, foot, "◂ turn back", lambda: self.turn(-1), "small", anchor="w")
         if self.folio < pages - 1:
-            self._button(x1, y1 - 14, "turn page ▸", lambda: self.turn(1), "small", anchor="e")
+            self._button(x1, foot, "turn page ▸", lambda: self.turn(1), "small", anchor="e")
+
+    # ---- right page: the selected sigil and the actions -------------------------
+
+    def _right_spacing(self) -> dict[str, float]:
+        """Vertical rhythm of the right page, in pixels for the current type scale."""
+        es, eb = self._em("small"), self._em("button")
+        return {
+            "pitch": 2.0 * eb,          # between the three action lines
+            "to_hotkey": 2.4 * eb,      # last action -> hotkey line
+            "hotkey_line": 1.9 * es,    # between the two hotkey lines when they wrap
+            "to_status": 2.0 * es,      # hotkey line -> status line
+            "divider": CAP * eb + 1.1 * eb,  # divider -> first action's baseline
+            "body_gap": 1.4 * eb,       # body content -> divider
+            "min_seal": 3.4 * eb,
+        }
+
+    def _details(self, cx, width, sigil) -> list:
+        """Stack parts under the seal."""
+        t, eb = self.theme, self._em("button")
+        if not sigil:
+            return [0.9 * eb,
+                    self._line(cx, "Draw a sigil to open a program, website,\nfile or folder. "
+                                   "Pick one from the index to see it here.", "body", t["ink_soft"])]
+        n = len(sigil.templates)
+        row = [("Edit", lambda: self.edit(sigil), None),
+               ("Test it", lambda: self.app.summon(dry_run=True), None),
+               ("Share", lambda: self.share(sigil), None),
+               ("Erase", lambda: self.delete(sigil), t["accent"])]
+        spread = min(5.2 * eb, width / len(row))
+
+        def buttons(y):
+            base = y + CAP * eb
+            for i, (text, command, color) in enumerate(row):
+                self._button(cx + (i - (len(row) - 1) / 2) * spread, base, text, command,
+                             color=color)
+
+        return [0.9 * eb,
+                self._line(cx, OPENS.get(sigil.action["type"], "Opens"), "small", t["ink_soft"]),
+                0.6 * eb,
+                self._line(cx, self._fit(sigil.action["target"], "body", width), "body"),
+                0.6 * eb,
+                self._line(cx, f"{n} drawing{'s' if n != 1 else ''}", "italic", t["ink_soft"]),
+                1.4 * eb,
+                (CAP * eb, buttons)]
+
+    def _action_lines(self) -> list[tuple[str, Callable[[], None], str | None, str | None]]:
+        t = self.theme
+        return [("✒  Inscribe a new sigil", self.new_sigil, t["accent"], t["ink"]),
+                ("✦  Cast a sigil", lambda: self.app.summon(), None, None),
+                ("◉  Test a drawing", lambda: self.app.summon(dry_run=True), None, None),
+                ("✉  Receive a sigil", self.receive, None, None)]
+
+    def _right_need(self) -> float:
+        """Height the right page needs with the current type, with the smallest seal."""
+        s = self._right_spacing()
+        x0, y0, x1, y1 = self.layout.right
+        fake = store.Sigil("x", {"type": "app", "target": "x"}, [])
+        details = sum(p if isinstance(p, (int, float)) else p[0]
+                      for p in self._details(0, x1 - x0, fake))
+        actions_h = (6 + s["to_status"] + s["to_hotkey"]
+                     + (len(self._action_lines()) - 1) * s["pitch"] + s["divider"]
+                     + s["body_gap"])
+        if not self._switches_fit(x1 - x0):
+            actions_h += s["hotkey_line"]
+        return self._header_height() + 2 * s["min_seal"] + details + actions_h + 12
+
+    def _switches(self) -> list[tuple[str, Callable[[], None]]]:
+        orb = f"Floating ✦ button: {'on' if self.settings['orb'] else 'off'}"
+        return [(self.hotkey_text, self.change_hotkey), (orb, self.toggle_orb)]
+
+    def _switches_fit(self, width: float) -> bool:
+        """Whether the hotkey and floating-button switches fit side by side."""
+        small = self._font("small")
+        return (sum(small.measure(text) for text, _ in self._switches())
+                + 2 * self._em("small")) <= width
+
+    def _status_room(self) -> float:
+        x0, _, x1, _ = self.layout.right
+        # the Obsidian quill lies across the bottom-right corner of the page
+        return (x1 - x0) - (90 if self.theme["name"] == "obsidian" else 10)
 
     def _draw_right(self, rect) -> None:
         t = self.theme
         x0, y0, x1, y1 = rect
-        cx = (x0 + x1) / 2
+        cx, width = (x0 + x1) / 2, x1 - x0
+        s = self._right_spacing()
         sigil = store.find(self.sigils, self.selected) if self.selected else None
-        sy = y0 + 104
+        top = self._header(rect, sigil.name if sigil else "Desktop Sigil")
 
-        if sigil:
-            self._seal(cx, sy, 92, sigil.templates[0] if sigil.templates else [],
-                       style=sigil.style)
-            self._text(cx, sy + 108, self._fit(sigil.name, "head", x1 - x0), "head", anchor="n")
-            opens = OPENS.get(sigil.action["type"], "Opens")
-            self._text(cx, sy + 152, opens, "small", t["ink_soft"], anchor="n")
-            self._text(cx, sy + 172, self._fit(sigil.action["target"], "body", x1 - x0), "body",
-                       anchor="n")
-            n = len(sigil.templates)
-            self._text(cx, sy + 196, f"{n} drawing{'s' if n != 1 else ''}", "italic",
-                       t["ink_soft"], anchor="n")
-            by = sy + 232
-            self._button(cx - 110, by, "Edit", lambda: self.edit(sigil))
-            self._button(cx, by, "Test it", lambda: self.app.summon(dry_run=True))
-            self._button(cx + 110, by, "Erase", lambda: self.delete(sigil), color=t["accent"])
-        else:
-            self._seal(cx, sy, 92, None)
-            self._text(cx, sy + 108, "Desktop Sigil", "head", anchor="n")
-            self._text(cx, sy + 152, "Draw a sigil to open a program, website,\nfile or "
-                       "folder. Pick one from the index to see it here.", "body",
-                       t["ink_soft"], anchor="n", justify="center")
+        # bottom up: status, hotkey + floating button, the three actions, divider
+        foot = self._footer(rect)
+        self.status_item = self._write(cx, foot, self._fit(self.status, "italic", self._status_room()),
+                                       "italic", t["ink_soft"])
+        switches = self._switches()
+        widths = [self._font("small").measure(text) for text, _ in switches]
+        gap = 2 * self._em("small")
+        hot = foot - s["to_status"]
+        if self._switches_fit(width):       # one line, centered as a pair
+            x = cx - (sum(widths) + gap) / 2
+            for (text, command), w in zip(switches, widths):
+                self._button(x, hot, text, command, "small", anchor="w", color=t["ink_soft"])
+                x += w + gap
+            hot_top = hot
+        else:                               # too narrow: one per line
+            for i, (text, command) in enumerate(switches):
+                self._button(cx, hot - (1 - i) * s["hotkey_line"], self._fit(text, "small", width),
+                             command, "small", color=t["ink_soft"])
+            hot_top = hot - s["hotkey_line"]
 
-        ay = y1 - 176
-        self._divider(cx, ay, (x1 - x0) / 2 - 20)
-        self._button(x0 + 10, ay + 32, "✒  Inscribe a new sigil", self.new_sigil, "button",
-                     anchor="w", color=t["accent"], hover=t["ink"])
-        self._button(x0 + 10, ay + 64, "✦  Cast a sigil", lambda: self.app.summon(), "button",
-                     anchor="w")
-        self._button(x0 + 10, ay + 96, "◉  Test a drawing", lambda: self.app.summon(dry_run=True),
-                     "button", anchor="w")
+        lines = self._action_lines()
+        first = hot_top - s["to_hotkey"] - (len(lines) - 1) * s["pitch"]
+        # a left-aligned list (so the icons line up), centered on the page as a block
+        ax = cx - max(self._font("button").measure(text) for text, *_ in lines) / 2
+        for i, (text, command, color, hover) in enumerate(lines):
+            self._button(ax, first + i * s["pitch"], text, command, anchor="w", color=color,
+                         hover=hover)
+        divider = first - s["divider"]
+        self._divider(cx, divider, width / 2 - 20)
 
-        fy = y1 - 34
-        box = self._button(x0 + 10, fy, self.hotkey_text, self.change_hotkey, "small", anchor="w",
-                           color=t["ink_soft"])
-        orb = "on" if self.settings["orb"] else "off"
-        self._button(box[2] + 18, fy, f"Floating ✦ button: {orb}", self.toggle_orb, "small",
-                     anchor="w", color=t["ink_soft"])
-        room = (x1 - x0) - (150 if t["name"] == "obsidian" else 20)
-        self.status_item = self._text(x0 + 10, y1 - 8, self._fit(self.status, "italic", room),
-                                      "italic", t["ink_soft"], anchor="w")
+        # the seal and its details, centered in the space that is left
+        details = self._details(cx, width, sigil)
+        bottom = divider - s["body_gap"]
+        fixed = sum(p if isinstance(p, (int, float)) else p[0] for p in details)
+        r = max(s["min_seal"] * 0.75, min((bottom - top - fixed) / 2, width / 2 - 10, 150))
+        seal = (2 * r, lambda y: self._seal(cx, y + r, r, sigil.templates[0] if sigil and
+                                            sigil.templates else (None if not sigil else []),
+                                            style=sigil.style if sigil else None,
+                                            runes=r >= 48))
+        self._stack(top, bottom, [seal, *details])
 
     # ---- mouse --------------------------------------------------------------
 
@@ -352,12 +536,18 @@ class SigilBook:
         self.status = text
         item = getattr(self, "status_item", None)
         if item and self.canvas.find_withtag(item):
-            x0, _, x1, _ = self.layout.right
-            room = (x1 - x0) - (150 if self.theme["name"] == "obsidian" else 20)
-            self.canvas.itemconfigure(item, text=self._fit(text, "italic", room))
+            self.canvas.itemconfigure(item, text=self._fit(text, "italic", self._status_room()))
 
     def new_sigil(self) -> None:
         SigilEditor(self, None)
+
+    def share(self, sigil: store.Sigil) -> None:
+        from .share_dialogs import ShareDialog
+        ShareDialog(self, sigil)
+
+    def receive(self) -> None:
+        from .share_dialogs import ReceiveDialog
+        ReceiveDialog(self)
 
     def edit(self, sigil: store.Sigil) -> None:
         SigilEditor(self, sigil)
