@@ -107,25 +107,35 @@ class SigilBook:
 
     # ---- drawing ------------------------------------------------------------
 
+    # Resizing: Tk repaints every canvas item for every step of a window drag, and the
+    # grimoire has about 1,500 small ones (rune writing, fur strands), ~180 ms a frame.
+    # So while the size is changing, those "detail" items are hidden (~40 ms a frame),
+    # and the book is drawn once at the new size when the mouse stops.
+    RESIZE_SETTLE_MS = 150
+
     def _on_resize(self, event: tk.Event) -> None:
         if (event.width, event.height) == self._size:
             return
         self._size = (event.width, event.height)
         if self._resize_job:
             self.root.after_cancel(self._resize_job)
-        self._resize_job = self.root.after(40, self.redraw)
+        else:
+            self.canvas.itemconfigure("detail", state="hidden")
+        self._resize_job = self.root.after(self.RESIZE_SETTLE_MS, self.redraw)
 
     def redraw(self) -> None:
         """Repaint everything: the grimoire background and the page contents."""
+        if self._resize_job:
+            self.root.after_cancel(self._resize_job)
         self._resize_job = None
         c = self.canvas
         c.delete("all")
         w, h = max(c.winfo_width(), 1000), max(c.winfo_height(), 680)
-        before = set(c.find_all())
         self.layout = grimoire.draw(c, w, h, self.theme)
         for item in c.find_all():
-            if item not in before:
-                c.addtag_withtag("bg", item)
+            c.addtag_withtag("bg", item)
+            if c.type(item) in ("text", "line"):
+                c.addtag_withtag("detail", item)
         self._fit_type()
         self.draw_pages()
 

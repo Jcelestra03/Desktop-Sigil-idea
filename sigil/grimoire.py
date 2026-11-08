@@ -130,22 +130,32 @@ def _stains(c, area: Rect, t, rng) -> None:
 
 
 def _glyph_rows(c, area: Rect, t, rng) -> None:
-    """Faint lines of 'writing' in runes and alchemical signs, like the pictures."""
+    """Faint lines of 'writing' in runes and alchemical signs, like the pictures.
+
+    Each word is one text item (not one per letter): there are over a thousand letters,
+    and Tk repaints every item while the window is resized. The random numbers are drawn
+    exactly as before, so the rest of the book (seeded from the same rng) doesn't move."""
     x0, y0, x1, y1 = area
     y = y0
     while y < y1:
         x = x0 + rng.uniform(0, 10)
         while x < x1:
             word = rng.randint(2, 6)
+            start, letters, size = x, [], None
             for _ in range(word):
                 if x > x1:
                     break
                 if rng.random() < .75:
-                    ch, font = rng.choice(RUNES), ("Segoe UI Historic", rng.choice((12, 13, 14)))
+                    ch, pt = rng.choice(RUNES), rng.choice((12, 13, 14))
                 else:
-                    ch, font = rng.choice(SYMBOLS), ("Segoe UI Symbol", rng.choice((11, 12)))
-                c.create_text(x, y, text=ch, fill=t["glyph"], font=font, anchor="w")
+                    ch, pt = rng.choice(SYMBOLS), rng.choice((11, 12))
+                letters.append(ch)
+                size = size or pt  # the word takes its first letter's size
                 x += rng.uniform(12, 16)
+            if letters:
+                # thin spaces keep the letters about as far apart as before
+                c.create_text(start, y, text=" ".join(letters), fill=t["glyph"],
+                              font=("Segoe UI Historic", size), anchor="w")
             x += rng.uniform(10, 18)
         y += 24
 

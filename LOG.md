@@ -299,3 +299,21 @@ Agents append here too (see `CLAUDE.md`).
   `%APPDATA%\Desktop Sigil`.
 - `python -m unittest` passes.
 - Not yet: tried on a PC that has never had Python installed.
+
+---
+
+## 2026-11-08 — Smoother window resizing (Jcelestra03, with Claude)
+
+- Resizing the Sigil Book lagged: Tk repaints every canvas item for each step of a window
+  drag, and the grimoire is ~1,600–2,600 items (rune writing, fur strands, beads), about
+  180 ms per frame plus a full redraw whenever the mouse paused for 40 ms.
+- While the size is changing, the small "detail" items (rune writing and fur/line strokes,
+  tagged `detail`) are hidden, and the book is redrawn once, 150 ms after the size stops
+  changing.
+- The rune writing is now one text item per word instead of one per letter (1,368 → 393
+  text items on Parchment). It draws the same random numbers, so nothing else moves.
+
+**Verified**
+- Simulated corner drag (40 steps): median **329 ms → 36 ms** per step on Parchment
+  (289 → 35 ms on Obsidian); the full book is back ~0.35 s after letting go.
+- Screenshot: the book looks the same as before. `python -m unittest` passes.
