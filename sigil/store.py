@@ -86,7 +86,7 @@ def find(sigils: list[Sigil], name: str) -> Sigil | None:
 
 
 # App settings (hotkey, floating button) live beside sigils.json in settings.json.
-SETTINGS_DEFAULTS = {"hotkey": "ctrl+alt+s", "orb": True, "orb_pos": None, "theme": "parchment"}
+SETTINGS_DEFAULTS = {"hotkey": "ctrl+alt+s", "orb": True, "orb_pos": None, "theme": "candlelight"}
 
 
 def settings_path() -> Path:

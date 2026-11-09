@@ -41,8 +41,17 @@ There was a **mock build**: it worked end to end (Sigil Book window, sigil edito
 floating ✦ button, overlay, recognizer), but we decided to **change the look and theme of
 the window** to make it more attractive before handing it to Jun.
 
-The window is now drawn as an **open grimoire**, in two versions you can switch between at
+The window is drawn as an **open grimoire**. On Nov 8 we redesigned it again for a more
+realistic, anime-fantasy feel (four concepts, then two variations; the "living spell
+circle" won, with the candlelit tome's lighting). There are now four looks, switched at
 the top of the window (the choice is remembered):
+
+- **Candlelight** (the default): a vellum grimoire on dark stone, over a glowing emerald
+  and gold rune circle, lit by a candle; emerald seals that glow, a red ribbon and wax seal.
+- **Midnight**: the same scene with black pages and gold ink.
+
+Both are painted pictures made by `tools/render_art.py`, with the text and buttons drawn on
+top. The first two looks are kept, just in case:
 
 - **Parchment**: aged pages with faint rune writing and stains, red-ink seals, gilt edges,
   on white fur with an amethyst sphere, crystal ball, twigs, beads and a red ribbon.
@@ -50,8 +59,7 @@ the top of the window (the choice is remembered):
   on teal wood with black candles, seal coins and parchment scraps.
 
 Left page: the *Sigil Index* (turn pages with ◂ ▸ or the mouse wheel). Right page: the
-selected sigil's seal and the actions. Next: decide with Tifanie which version (or both)
-Jun gets by default.
+selected sigil's seal and the actions.
 
 ## Ideas we considered first
 
@@ -89,6 +97,7 @@ apps), which hotkey we use, and what we polish in week 2.
 | Sigil Book window, editor, floating ✦ button, launcher | Jcelestra03 | `sigil/manager.py`, `Desktop Sigil.pyw` |
 | Tutorial tour and "?" help | Jcelestra03 | `sigil/tutorial.py`, `tests/test_tutorial.py` |
 | The .exe build and app icon | Jcelestra03 | `build_exe.py`, `tools/make_icon.py`, `assets/` |
+| Painted grimoires (Candlelight, Midnight) | Jcelestra03 | `sigil/artbook.py`, `tools/render_art.py`, `assets/grimoire/` |
 | Grimoire look: the two themes and the book drawing | Jcelestra03 | `sigil/themes.py`, `sigil/grimoire.py` |
 | Global hotkey + main run loop | Jcelestra03 | `sigil/hotkey.py`, `sigil/app.py` |
 | Recognizer | Tifanie | `sigil/recognizer.py`, `tests/test_recognizer.py` |
@@ -142,7 +151,8 @@ Changing this signature needs both of us to agree, in a PR.
 - [x] Bigger sigil editor with Paint-style pens, sizes and colors (saved with each sigil)
 - [x] Tutorial: a guided tour on first launch (replay with ✦ Tutorial), an optional practice
   cast, and a "?" next to every button
-- [ ] Pick Jun's default grimoire; theme the drawing overlay to match (red / gold ink)
+- [x] Pick Jun's default grimoire: Candlelight (painted), with Midnight as the dark one
+- [ ] Theme the drawing overlay to match the grimoire (emerald / gold ink)
 - [ ] Preload sigils for Jun's games and apps
 - [x] Settings window to add/remove sigils without the command line (Sigil Book)
 - [x] A way to cast without the hotkey (floating ✦ button)

@@ -207,14 +207,15 @@ class SigilBook:
         self.hits.append(Hit(box, command, on_double, item, color, hover or t["accent"]))
         return box
 
-    def _help(self, box, key: str, x: float | None = None, y: float | None = None) -> None:
+    def _help(self, box, key: str, x: float | None = None, y: float | None = None,
+              color: str | None = None) -> None:
         """A small circled "?" at the top right of a button's box (or at x, y); hovering it
         shows tutorial.HELP[key]."""
         t, c = self.theme, self.canvas
         r = max(6.0, 0.55 * self._em("small"))
         cx = (box[2] if x is None else x) + r
         cy = (box[1] if y is None else y) + r
-        color = t["ink_soft"]
+        color = color or t["ink_soft"]
         c.create_oval(cx - r, cy - r, cx + r, cy + r, outline=color)
         item = c.create_text(cx, cy, text="?", fill=color,
                              font=(t["font_small"][0], -round(r * 1.35), "bold"))
@@ -290,6 +291,10 @@ class SigilBook:
               style: dict | None = None) -> None:
         """A double ink ring with runes between the rings, like the seals in the pictures."""
         t, c = self.theme, self.canvas
+        if t["glow"]:  # a soft halo: wider rings fading into the page
+            for grow, k in ((7, .82), (4, .66), (2, .45)):
+                c.create_oval(cx - r, cy - r, cx + r, cy + r, width=width + 2 * grow,
+                              outline=blend(t["accent"], t["page"], k))
         c.create_oval(cx - r, cy - r, cx + r, cy + r, outline=t["accent"], width=width)
         inner = r - (12 if runes else 5)
         c.create_oval(cx - inner, cy - inner, cx + inner, cy + inner, outline=t["accent"], width=1)
@@ -330,7 +335,7 @@ class SigilBook:
                 self.canvas.create_line(x, uy, x + w, uy, fill=t["accent"], width=2)
             x += w + gap
         self.regions["theme"] = (first[0], box[1], box[2], box[3])
-        self._help(box, "theme")
+        self._help(box, "theme", color=t["desk_text"])
         x = box[2] + gap
         self._write(x, base, "·", "body", t["desk_text"])
         self.regions["tutorial"] = self._button(x + 0.7 * gap, base, tutorial_text,
@@ -381,7 +386,13 @@ class SigilBook:
             cy = ry + row_h / 2
             band = (x0 - 10, ry + inset, x1 + 10, ry + row_h - inset)
             if sigil.name == self.selected:
-                c.create_rectangle(*band, fill=blend(t["page"], t["page_dark"], .35), outline="")
+                if t["art"]:  # a solid band would hide the painted page: faint rules instead
+                    soft = blend(t["accent"], t["page"], .6)
+                    c.create_line(band[0], band[1], band[2], band[1], fill=soft)
+                    c.create_line(band[0], band[3], band[2], band[3], fill=soft)
+                else:
+                    c.create_rectangle(*band, fill=blend(t["page"], t["page_dark"], .35),
+                                       outline="")
                 c.create_line(band[0], band[1], band[0], band[3], fill=t["accent"], width=3)
             self._seal(x0 + r + 2, cy, r, sigil.templates[0] if sigil.templates else [],
                        width=2, runes=False, style=sigil.style)
@@ -425,7 +436,7 @@ class SigilBook:
         row = [("Edit", lambda: self.edit(sigil), None, "edit"),
                ("Test it", lambda: self.app.summon(dry_run=True), None, "test_it"),
                ("Share", lambda: self.share(sigil), None, "share"),
-               ("Erase", lambda: self.delete(sigil), t["accent"], "erase")]
+               ("Erase", lambda: self.delete(sigil), t["danger"], "erase")]
         spread = min(5.2 * eb, width / len(row))
 
         def buttons(y):

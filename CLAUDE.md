@@ -26,8 +26,11 @@ is for developers.
 - `build_exe.py`, `tools/make_icon.py`, `assets/sigil.ico` — the .exe build and its icon.
 - `sigil/manager.py` — Sigil Book main window (an open grimoire drawn on one Canvas, with
   coordinate-based click areas instead of widgets), sigil editor dialog, floating ✦ button.
-- `sigil/themes.py` — the two looks, Parchment and Obsidian. Both dicts must have the same
-  keys (a test checks this); read colors and fonts from the theme, never hard-code them.
+- `sigil/themes.py` — the four looks: Candlelight and Midnight (painted, `"art"` set) and
+  Parchment and Obsidian (drawn). All dicts must have the same keys (a test checks this);
+  read colors and fonts from the theme, never hard-code them.
+- `sigil/artbook.py` — shows a painted look's picture (`assets/grimoire/`, made by
+  `tools/render_art.py` with Edge) at the size that fits, and returns where its pages are.
 - `sigil/grimoire.py` — draws the desk, props and pages. Seeded randomness, so redraws are
   stable. Items tagged `bg` (background), `front` (props above the writing), `fg` (page
   writing, redrawn on every click by `draw_pages`).

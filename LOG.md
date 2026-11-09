@@ -317,3 +317,58 @@ Agents append here too (see `CLAUDE.md`).
 - Simulated corner drag (40 steps): median **329 ms → 36 ms** per step on Parchment
   (289 → 35 ms on Obsidian); the full book is back ~0.35 s after letting go.
 - Screenshot: the book looks the same as before. `python -m unittest` passes.
+
+---
+
+## 2026-11-08 — New grimoire: Candlelight and Midnight (Jcelestra03, with Claude)
+
+- Jcelestra03 wanted a more realistic, anime-fantasy look. Four concepts were painted on a
+  design canvas (Atelier sketchbook, Candlelit tome, Starlit grimoire, Living spell
+  circle); the spell circle was picked, with the tome's candle lighting, in a light and a
+  dark version.
+- **Candlelight** (new default) and **Midnight** are painted pictures: a vellum (or black)
+  grimoire on dark stone over a glowing emerald and gold rune circle, a candle's warm
+  light falling off into shadow, gold corners, a red ribbon and a wax seal. tkinter can't
+  paint soft light or grain, so `tools/render_art.py` draws the scene as SVG and has Edge
+  (headless) save PNGs at 4 scales (`assets/grimoire/`, ~15 MB). `sigil/artbook.py`
+  shows the scale that fits the window, centered; the picture fades to the canvas color at
+  its edges, so big windows show no seam. Text, seals and buttons are drawn on top as before.
+- Seals get a soft halo on the painted looks (`"glow"`), the selected index row uses
+  faint rules instead of a solid band, and Erase has its own color (`"danger"`).
+- **Parchment and Obsidian are kept** as the 3rd and 4th choices.
+- New users start on Candlelight: `SETTINGS_DEFAULTS["theme"]` in `store.py` (Tifanie's
+  file) changed from "parchment" to "candlelight". Existing settings keep their choice.
+
+**Verified**
+- `python -m unittest` passes (themes: all four share keys, every painted scale exists).
+- Screenshots: both looks at 1160×760 with sigils, Candlelight at 1840×1000 (1.2 scale, no
+  seams), the Midnight editor, the tour on Candlelight, and the rebuilt .exe (zip now
+  28.6 MB) opening a fresh user into Candlelight.
+
+---
+
+## 2026-11-08 — Easier-to-read small text on Candlelight and Midnight (Jcelestra03, with Claude)
+
+- Small text (sigil details, "Opens the program", hotkey and ✦ button lines, status) was
+  hard to read on Candlelight: the candle's shadow darkened the lower right page, so the
+  soft ink measured only 2.3:1 against it (4.5:1 is the usual minimum for small text).
+- `tools/render_art.py`: the deep shadow now falls on the desk *around* the book; the
+  pages get only a gentle candle warmth and a slight dimming far from it.
+- Soft ink is a little stronger (Candlelight `#47331f`, Midnight `#bba06a`) and the
+  painted looks use 11 pt instead of 10 pt for small and italic text.
+- Result, measured on the art at each text spot: every one is 5.0:1 or better on both
+  looks (was 2.3–6.0 on Candlelight, 2.7–5.0 on Midnight). Screenshots: same mood, the
+  desk still falls into shadow. Tests pass; the .exe was rebuilt.
+
+---
+
+## 2026-11-08 — README rewritten as a user guide (Jcelestra03, with Claude)
+
+- The GitHub home page now walks a new user through: install (download the zip from
+  Releases → Extract All → Desktop Sigil.exe → past SmartScreen; or from source with
+  Python), the first-launch tour and practice cast, picking a grimoire, making a first
+  sigil, casting, every button, sharing, a troubleshooting table, and uninstalling.
+  Developer notes moved to the end.
+- Screenshots of Candlelight and Midnight added in `docs/`.
+- Note: the install steps point to the Releases page; a release with
+  `Desktop-Sigil-Windows.zip` attached still has to be published.

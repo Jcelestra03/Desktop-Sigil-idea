@@ -28,6 +28,9 @@ class Layout:
 
 
 def draw(c: tk.Canvas, w: int, h: int, t: dict) -> Layout:
+    if t["art"]:  # a painted look (Candlelight, Midnight)
+        from . import artbook
+        return artbook.draw(c, w, h, t)
     rng = random.Random(7)
     mx, top, bottom = 58, 66, 50
     book = (mx, top, w - mx, h - bottom)
